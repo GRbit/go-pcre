@@ -59,14 +59,14 @@ func checkmatch1(t *testing.T, dostring bool, m *Matcher,
 	var prefix string
 	if dostring {
 		if m == nil {
-			m = re.MatcherString(subject, 0)
+			m = re.NewMatcherString(subject, 0)
 		} else {
 			m.ResetString(re, subject, 0)
 		}
 		prefix = "string"
 	} else {
 		if m == nil {
-			m = re.Matcher([]byte(subject), 0)
+			m = re.NewMatcher([]byte(subject), 0)
 		} else {
 			m.Reset(re, []byte(subject), 0)
 		}
@@ -132,7 +132,7 @@ func TestPartial(t *testing.T) {
 	re := MustCompile(`^abc`, 0)
 
 	// Check we get a partial match when we should
-	m := re.MatcherString("ab", PARTIAL_SOFT)
+	m := re.NewMatcherString("ab", PARTIAL_SOFT)
 	if !m.Matches {
 		t.Error("Failed to find any matches")
 	} else if !m.Partial {
@@ -140,21 +140,21 @@ func TestPartial(t *testing.T) {
 	}
 
 	// Check we get an exact match when we should
-	m = re.MatcherString("abc", PARTIAL_SOFT)
+	m = re.NewMatcherString("abc", PARTIAL_SOFT)
 	if !m.Matches {
 		t.Error("Failed to find any matches")
 	} else if m.Partial {
 		t.Error("Match was partial but should have been exact")
 	}
 
-	m = re.Matcher([]byte("ab"), PARTIAL_SOFT)
+	m = re.NewMatcher([]byte("ab"), PARTIAL_SOFT)
 	if !m.Matches {
 		t.Error("Failed to find any matches")
 	} else if !m.Partial {
 		t.Error("The match was not partial")
 	}
 
-	m = re.Matcher([]byte("abc"), PARTIAL_SOFT)
+	m = re.NewMatcher([]byte("abc"), PARTIAL_SOFT)
 	if !m.Matches {
 		t.Error("Failed to find any matches")
 	} else if m.Partial {
@@ -163,11 +163,11 @@ func TestPartial(t *testing.T) {
 }
 
 func TestCaseless(t *testing.T) {
-	m := MustCompile("abc", CASELESS).MatcherString("Abc", 0)
+	m := MustCompile("abc", CASELESS).NewMatcherString("Abc", 0)
 	if !m.Matches {
 		t.Error("CASELESS")
 	}
-	m = MustCompile("abc", 0).MatcherString("Abc", 0)
+	m = MustCompile("abc", 0).NewMatcherString("Abc", 0)
 	if m.Matches {
 		t.Error("!CASELESS")
 	}
@@ -175,7 +175,7 @@ func TestCaseless(t *testing.T) {
 
 func TestNamed(t *testing.T) {
 	m := MustCompile("(?<L>a)(?<M>X)*bc(?<DIGITS>\\d*)", 0).
-		MatcherString("abc12", 0)
+		NewMatcherString("abc12", 0)
 	if !m.Matches {
 		t.Error("Matches")
 	}
@@ -207,7 +207,7 @@ func TestFindIndex(t *testing.T) {
 
 func TestExtract(t *testing.T) {
 	re := MustCompile("b(c)(d)", 0)
-	m := re.MatcherString("abcdef", 0)
+	m := re.NewMatcherString("abcdef", 0)
 	i := m.ExtractString()
 	if i[0] != "abcdef" {
 		t.Error("Full line unavailable: ", i[0])
