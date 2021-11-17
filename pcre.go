@@ -143,7 +143,7 @@ func Config(f int) (r string) {
 	} else {
 		var i C.int
 		C.pcre_config(C.int(f), unsafe.Pointer(&i))
-		r = fmt.Sprint(int32(i))
+		r = strconv.Itoa(i)
 	}
 	return
 }
@@ -370,9 +370,9 @@ func MustCompileParseJIT(pattern string, flags int) (re Regexp) {
 
 // Return the start and end of the first match.
 func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
-	m := re.Matcher(bytes, flags)
+	m := re.NewMatcher(bytes, flags)
 	offset := 0
-	for m.Match(bytes[offset:], flags) {
+	for m.MatchWFlags(bytes[offset:], flags) {
 		r = append(r, []int{offset + int(m.ovector[0]), offset + int(m.ovector[1])})
 		offset += int(m.ovector[1])
 	}
@@ -382,7 +382,7 @@ func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
 // Return the start and end of the first match, or nil if no match.
 // loc[0] is the start and loc[1] is the end.
 func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
-	m := re.Matcher(bytes, flags)
+	m := re.NewMatcher(bytes, flags)
 	if m.Matches {
 		return []int{int(m.ovector[0]), int(m.ovector[1])}
 	}
@@ -392,7 +392,7 @@ func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 // Return the start and end of the first match, or nil if no match.
 // loc[0] is the start and loc[1] is the end.
 func (re *Regexp) FindString(s string, flags int) string {
-	m := re.Matcher([]byte(s), flags)
+	m := re.NewMatcher([]byte(s), flags)
 	if m.Matches {
 		return s[int(m.ovector[0]):int(m.ovector[1])]
 	}
@@ -407,39 +407,39 @@ func (re Regexp) Groups() int {
 	return int(pcregroups((*C.pcre)(unsafe.Pointer(&re.ptr[0]))))
 }
 
-// Tries to match the speficied byte array slice to the current pattern.
+// MatchWFlags tries to match the specified byte array slice to the pattern.
 // Returns true if the match succeeds.
-func (r *Regexp) Match(subject []byte, flags int) bool {
-	m := r.Matcher(subject, flags)
+func (r *Regexp) MatchWFlags(subject []byte, flags int) bool {
+	m := r.NewMatcher(subject, flags)
 	return m.Matches
 }
 
-// Same as Match, but accept string as argument
-func (r *Regexp) MatchString(subject string, flags int) bool {
-	m := r.Matcher([]byte(subject), flags)
+// MatchStringWFlags is the same as MatchWFlags, but accept string as argument.
+func (r *Regexp) MatchStringWFlags(subject string, flags int) bool {
+	m := r.NewMatcher([]byte(subject), flags)
 	return m.Matches
 }
 
-// Returns a new matcher object, with the byte array slice as a
+// NewMatcher returns a new matcher object, with the byte array slice as a
 // subject.
-func (re Regexp) Matcher(subject []byte, flags int) (m *Matcher) {
+func (re Regexp) NewMatcher(subject []byte, flags int) (m *Matcher) {
 	m = new(Matcher)
 	m.Reset(re, subject, flags)
 	return
 }
 
-// Returns a new matcher object, with the specified subject string.
-func (re Regexp) MatcherString(subject string, flags int) (m *Matcher) {
+// NewMatcherString returns a new matcher object, with the subject string.
+func (re Regexp) NewMatcherString(subject string, flags int) (m *Matcher) {
 	m = new(Matcher)
 	m.ResetString(re, subject, flags)
 	return
 }
 
-// Return a copy of a byte slice with pattern matches replaced by repl.
+// ReplaceAll return a copy of a byte slice with pattern matches replaced by repl.
 func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
-	m := re.Matcher(bytes, 0)
+	m := re.NewMatcher(bytes, 0)
 	r := make([]byte, 0, len(bytes))
-	for m.Match(bytes, flags) {
+	for m.MatchWFlags(bytes, flags) {
 		r = append(append(r, bytes[:m.ovector[0]]...), repl...)
 		bytes = bytes[m.ovector[1]:]
 	}
@@ -479,7 +479,7 @@ func (re *Regexp) study(flags int) error {
 }
 
 // Matcher objects provide a place for storing match results.
-// They can be created by the Matcher and MatcherString functions,
+// They can be created by the NewMatcher and NewMatcherString functions,
 // or they can be initialized with Reset or ResetString.
 type Matcher struct {
 	re       Regexp
@@ -641,18 +641,18 @@ func (m *Matcher) Index() []int {
 	return []int{int(m.ovector[0]), int(m.ovector[1])}
 }
 
-// Tries to match the speficied byte array slice to the current
+// MatchWFlags tries to match the specified byte array slice to the
 // pattern. Returns true if the match succeeds.
-func (m *Matcher) Match(subject []byte, flags int) bool {
+func (m *Matcher) MatchWFlags(subject []byte, flags int) bool {
 	rc := m.Exec(subject, flags)
 	m.Matches, m.Error = checkMatch(rc)
 	m.Partial = (rc == C.PCRE_ERROR_PARTIAL)
 	return m.Matches
 }
 
-// Tries to match the speficied subject string to the current pattern.
+// MatchStringWFlags tries to match the speficied subject string to the pattern.
 // Returns true if the match succeeds.
-func (m *Matcher) MatchString(subject string, flags int) bool {
+func (m *Matcher) MatchStringWFlags(subject string, flags int) bool {
 	rc := m.ExecString(subject, flags)
 	m.Matches, m.Error = checkMatch(rc)
 	m.Partial = (rc == ERROR_PARTIAL)
@@ -689,7 +689,7 @@ func checkMatch(rc int) (bool, error) {
 		panic("pcre_exec: INTERNAL ERROR")
 	}
 	panic("unexepected return code from pcre_exec: " +
-		strconv.Itoa(int(rc)))
+		strconv.Itoa(rc))
 }
 
 func (m *Matcher) name2index(name string) (group int, err error) {
@@ -754,7 +754,7 @@ func (m *Matcher) Reset(re Regexp, subject []byte, flags int) {
 		panic("Regexp.Matcher: uninitialized")
 	}
 	m.init(re)
-	m.Match(subject, flags)
+	m.MatchWFlags(subject, flags)
 }
 
 // Switches the matcher object to the specified pattern and subject
@@ -764,7 +764,7 @@ func (m *Matcher) ResetString(re Regexp, subject string, flags int) {
 		panic("Regexp.Matcher: uninitialized")
 	}
 	m.init(re)
-	m.MatchString(subject, flags)
+	m.MatchStringWFlags(subject, flags)
 }
 
 // Copyright (c) 2011 Florian Weimer. All rights reserved.
