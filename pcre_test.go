@@ -7,7 +7,7 @@ import (
 )
 
 func TestCompile(t *testing.T) {
-	var check = func(p string, groups int) {
+	check := func(p string, groups int) {
 		re, err := Compile(p, 0)
 		if err != nil {
 			t.Error(p, err)
@@ -25,8 +25,9 @@ func TestCompile(t *testing.T) {
 }
 
 func TestCompileFail(t *testing.T) {
-	var check = func(p, msg string) {
+	check := func(p, msg string) {
 		_, err := Compile(p, 0)
+
 		switch {
 		case err == nil:
 			t.Error(p)
@@ -34,78 +35,78 @@ func TestCompileFail(t *testing.T) {
 			t.Error(p, "Message:", err.Error())
 		}
 	}
-	check("(",       "( (1): missing )")
-	check(`\`,       `\ (1): \ at end of pattern`)
-	check(`abc\`,    `abc\ (4): \ at end of pattern`)
+
+	check("(", "( (1): missing )")
+	check(`\`, `\ (1): \ at end of pattern`)
+	check(`abc\`, `abc\ (4): \ at end of pattern`)
 	check("abc\000", "abc\000 (3): NUL byte in pattern")
 	check("a\000bc", "a\000bc (1): NUL byte in pattern")
 }
 
-func equal(l, r []string) bool {
-	if len(l) != len(r) {
-		return false
-	}
-	for i, lv := range l {
-		if lv != r[i] {
-			return false
-		}
-	}
-	return true
-}
-
 func checkmatch1(t *testing.T, dostring bool, m *Matcher,
-	pattern, subject string, args ...interface{}) {
+	pattern, subject string, args ...interface{},
+) {
 	re := MustCompile(pattern, 0)
 	var prefix string
+
 	if dostring {
+		prefix = "string"
+
 		if m == nil {
 			m = re.NewMatcherString(subject, 0)
 		} else {
 			m.ResetString(re, subject, 0)
 		}
-		prefix = "string"
 	} else {
+		prefix = "[]byte"
+
 		if m == nil {
 			m = re.NewMatcher([]byte(subject), 0)
 		} else {
 			m.Reset(re, []byte(subject), 0)
 		}
-		prefix = "[]byte"
 	}
+
 	if len(args) == 0 {
 		if m.Matches {
-			t.Error(prefix, pattern, subject, "!Matches")
+			t.Errorf("prefix='%s' pattern='%s' subject='%s': %s", prefix, pattern, subject, "!Matches")
 		}
-	} else {
-		if !m.Matches {
-			t.Error(prefix, pattern, subject, "Matches")
-			return
-		}
-		if m.Groups != len(args)-1 {
-			t.Error(prefix, pattern, subject, "Groups", m.Groups)
-			return
-		}
-		for i, arg := range args {
-			if s, ok := arg.(string); ok {
-				if !m.Present(i) {
-					t.Error(prefix, pattern, subject,
-						"Present", i)
 
-				}
-				if g := string(m.Group(i)); g != s {
-					t.Error(prefix, pattern, subject,
-						"Group", i, g, "!=", s)
-				}
-				if g := m.GroupString(i); g != s {
-					t.Error(prefix, pattern, subject,
-						"GroupString", i, g, "!=", s)
-				}
-			} else {
-				if m.Present(i) {
-					t.Error(prefix, pattern, subject,
-						"!Present", i)
-				}
+		return
+	}
+
+	if !m.Matches {
+		t.Logf("%v", m.Matches)
+		t.Errorf("prefix='%s' pattern='%s' subject='%s': %s", prefix, pattern, subject, "Matches")
+
+		return
+	}
+
+	if m.Groups != len(args)-1 {
+		t.Error(prefix, pattern, subject, "Groups", m.Groups)
+
+		return
+	}
+
+	for i, arg := range args {
+		if s, ok := arg.(string); ok {
+			if !m.Present(i) {
+				t.Error(prefix, pattern, subject,
+					"Present", i)
 			}
+
+			if g := string(m.Group(i)); g != s {
+				t.Error(prefix, pattern, subject,
+					"Group", i, g, "!=", s)
+			}
+
+			if g := m.GroupString(i); g != s {
+				t.Error(prefix, pattern, subject,
+					"GroupString", i, g, "!=", s)
+			}
+		} else if m.Present(i) {
+			t.Error(prefix, pattern, subject,
+				"!Present", i)
 		}
 	}
 }
@@ -176,20 +177,25 @@ func TestCaseless(t *testing.T) {
 func TestNamed(t *testing.T) {
 	m := MustCompile("(?<L>a)(?<M>X)*bc(?<DIGITS>\\d*)", 0).
 		NewMatcherString("abc12", 0)
+
 	if !m.Matches {
 		t.Error("Matches")
 	}
+
 	if !m.NamedPresent("L") {
 		t.Error("NamedPresent(\"L\")")
 	}
+
 	if m.NamedPresent("M") {
 		t.Error("NamedPresent(\"M\")")
 	}
+
 	if !m.NamedPresent("DIGITS") {
 		t.Error("NamedPresent(\"DIGITS\")")
 	}
+
 	group, err := m.NamedString("DIGITS")
-	if err != nil || "12" != group {
+	if err != nil || group != "12" {
 		t.Error("NamedString(\"DIGITS\")")
 	}
 }
@@ -207,15 +213,28 @@ func TestFindIndex(t *testing.T) {
 
 func TestExtract(t *testing.T) {
 	re := MustCompile("b(c)(d)", 0)
+	m := re.NewMatcher([]byte("abcdef"), 0)
+	i := m.Extract()
+	switch {
+	case string(i[0]) != "abcdef":
+		t.Error("Full line unavailable: ", i[0])
+	case string(i[1]) != "c":
+		t.Error("First match group no as expected: ", i[1])
+	case string(i[2]) != "d":
+		t.Error("Second match group no as expected: ", i[2])
+	}
+}
+
+func TestExtractString(t *testing.T) {
+	re := MustCompile("b(c)(d)", 0)
 	m := re.NewMatcherString("abcdef", 0)
 	i := m.ExtractString()
-	if i[0] != "abcdef" {
+	switch {
+	case i[0] != "abcdef":
 		t.Error("Full line unavailable: ", i[0])
-	}
-	if i[1] != "c" {
+	case i[1] != "c":
 		t.Error("First match group no as expected: ", i[1])
-	}
-	if i[2] != "d" {
+	case i[2] != "d":
 		t.Error("Second match group no as expected: ", i[2])
 	}
 }

@@ -1,0 +1,72 @@
+linters-settings:
+  gci:
+    sections:
+      - Standard
+      - prefix(github.com/grbit/go-pcre)
+      - Default
+  dupl:
+    threshold: 100
+  errorlint:
+    errorf: true
+  errcheck:
+    check-type-assertions: true
+    check-blank: true
+  exhaustive:
+    check-generated: false
+    default-signifies-exhaustive: false
+  funlen:
+    lines: 60
+    statements: 40
+  gocognit:
+    min-complexity: 10
+  gocyclo:
+    min-complexity: 10
+  goconst:
+    min-len: 2
+    min-occurrences: 2
+  gocritic:
+    enabled-tags:
+      - diagnostic
+        # - experimental
+      - opinionated
+        # - performance
+      - style
+    disabled-checks:
+      - dupImport
+      - unnecessaryBlock
+      - sloppyReassign
+  gofumpt:
+    extra-rules: true
+  govet:
+    check-shadowing: true
+    enable-all: true
+    printf:
+      funcs:
+        - errorf
+        - prependf
+        - appendf
+        - msgf
+  lll:
+    line-length: 120
+    locale: US
+  nestif:
+    min-complexity: 4
+  nolintlint:
+    require-explanation: true
+    require-specific: false
+
+linters:
+    # disable-all: true
+  enable-all: true
+  disable:
+      # - lll
+    - typecheck
+    - nosnakecase
+  exclude-rules:
+    - linters:
+        - gci
+      text: 'import "C"'
+
+issues:
+  new: false
+  fix: false
