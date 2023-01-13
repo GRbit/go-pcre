@@ -4,7 +4,7 @@ go-pcre
 This package provides Perl-Compatible RegularExpression
 support in Go using `libpcre` or `libpcre++`.
 
-The origin of this package is [glenn-brown pcre](https://github.com/glenn-brown/golang-pkg-pcre
+The origin of this package is [glenn-brown pcre](https://github.com/glenn-brown/golang-pkg-pcre)
 but across other forks, this one has JIT compilation available, which makes it much faster.
 You can check out [benchmarks game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/performance/regexredux.html)
 to see the difference.
@@ -70,7 +70,14 @@ More details on this [here](https://www.arp242.net/static-go.html)
 
 ## Performance
 
+Brief performance comparison across other Go libraries is in the beginning
+of the README, but if you are curious what regex library is the fastest here is
+an exhaustive research of the question:
 https://zherczeg.github.io/sljit/regex_perf.html
+
+The answer is: it depends. But in most cases, it's RE2 or PCRE-JIT.
+RE2 tends to utilize multi-core systems better,
+while PCRE-JIT is better at using one CPU core for almost all use cases.
 
 ## LICENSE
 
