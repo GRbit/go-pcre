@@ -200,6 +200,33 @@ func TestNamed(t *testing.T) {
 	}
 }
 
+func TestNames(t *testing.T) {
+	re := MustCompile("(?<name2>a)(b)(c)(?<n1>d)", 0)
+	names := re.CaptureNames()
+	if len(names) != 2 {
+		t.Error("Names count", len(names))
+	}
+	if names[0].Name != "n1" {
+		t.Error("Names name 1", names[0].Name)
+	}
+	if names[1].Name != "name2" {
+		t.Error("Names name 2", names[1].Name)
+	}
+	if names[0].Index != 4 {
+		t.Error("Names index 1", names[0].Index)
+	}
+	if names[1].Index != 1 {
+		t.Error("Names index 2", names[1].Index)
+	}
+
+	// Have no named capturing
+	re = MustCompile("(a)bc", 0)
+	names = re.CaptureNames()
+	if len(names) != 0 {
+		t.Error("Names count", len(names))
+	}
+}
+
 func TestFindIndex(t *testing.T) {
 	re := MustCompile("bcd", 0)
 	i := re.FindIndex([]byte("abcdef"), 0)
