@@ -38,6 +38,7 @@ package pcre
 import "C"
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strconv"
@@ -119,6 +120,49 @@ func pcreGroups(ptr *C.pcre) (count C.int) {
 	C.pcre_fullinfo(ptr, nil, C.PCRE_INFO_CAPTURECOUNT, unsafe.Pointer(&count))
 
 	return
+}
+
+type CaptureName struct {
+	Name  string
+	Index int
+}
+
+// Get names of capturing parentheses
+func pcreCaptureNames(ptr *C.pcre) []CaptureName {
+	var nameCount C.int
+	C.pcre_fullinfo(ptr, nil, C.PCRE_INFO_NAMECOUNT, unsafe.Pointer(&nameCount))
+	result := make([]CaptureName, nameCount)
+	if nameCount > 0 {
+		var nameEntrySize C.int
+		C.pcre_fullinfo(ptr, nil, C.PCRE_INFO_NAMEENTRYSIZE, unsafe.Pointer(&nameEntrySize))
+		var data unsafe.Pointer
+		C.pcre_fullinfo(ptr, nil, C.PCRE_INFO_NAMETABLE, unsafe.Pointer(&data))
+		for nameIndex := 0; nameIndex < int(nameCount); nameIndex++ {
+			offset := nameIndex * int(nameEntrySize)
+
+			// Bytes 0 and 1 contains name index (most significant byte first)
+			// From byte 2 starting name (zero-ended)
+			high_index := *((*byte)(unsafe.Add(data, offset+0)))
+			low_index := *((*byte)(unsafe.Add(data, offset+1)))
+			index := int(high_index)*256 + int(low_index)
+
+			// Building capture name from byte 2
+			buff := bytes.NewBufferString("")
+			for charOffset := 2; charOffset < int(nameEntrySize); charOffset++ {
+				c := *((*byte)(unsafe.Add(data, offset+charOffset)))
+				if c == 0 {
+					break
+				}
+				buff.WriteByte(c)
+			}
+			result[nameIndex] = CaptureName{
+				Name:  buff.String(),
+				Index: index,
+			}
+		}
+	}
+
+	return result
 }
 
 // ParseFlags returns string with regex pattern and int with pcre flags.
@@ -353,6 +397,17 @@ func (re Regexp) Groups() int {
 	}
 
 	return int(pcreGroups((*C.pcre)(unsafe.Pointer(&re.ptr[0]))))
+}
+
+// Names return the names of capturing groups in the compiled regexp pattern.
+// Each item contains name and index of capturing parentheses
+func (re Regexp) CaptureNames() []CaptureName {
+	if re.ptr == nil {
+		panic("Regexp.CaptureNames: uninitialized")
+	}
+
+	data := pcreCaptureNames((*C.pcre)(unsafe.Pointer(&re.ptr[0])))
+	return data
 }
 
 // MatchWFlags tries to match the specified byte array slice to the pattern.
