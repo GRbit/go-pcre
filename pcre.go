@@ -269,11 +269,9 @@ func Compile(pattern string, flags int) (Regexp, error) {
 
 	re := Regexp{
 		expr:  pattern,
-		ptr:   make([]byte, size),
+		ptr:   C.GoBytes(unsafe.Pointer(ptr), C.int(size)),
 		extra: nil,
 	}
-
-	C.memcpy(unsafe.Pointer(&re.ptr[0]), unsafe.Pointer(ptr), size)
 
 	return re, nil
 }
@@ -315,10 +313,9 @@ func CompileJIT(pattern string, flagsC, flagsS int) (Regexp, error) {
 
 	re := Regexp{
 		expr:  pattern,
-		ptr:   make([]byte, pSize),
+		ptr:   C.GoBytes(unsafe.Pointer(ptr), C.int(pSize)),
 		extra: nil,
 	}
-	C.memcpy(unsafe.Pointer(&re.ptr[0]), unsafe.Pointer(ptr), pSize)
 
 	if errS := re.study(flagsS); errS != nil {
 		return re, fmt.Errorf("study error: %w", errS)
@@ -515,14 +512,10 @@ func (re *Regexp) study(flags int) error {
 
 	defer C.free(unsafe.Pointer(extra))
 
-	size := pcreJITSize((*C.pcre)(unsafe.Pointer(&re.ptr[0])), extra)
-	if size > 0 {
-		re.extra = make([]byte, size)
-		C.memcpy(unsafe.Pointer(&re.extra[0]), unsafe.Pointer(extra), size)
-		return nil
-	}
-
-	return errors.New(C.GoString(err))
+	var _extra C.struct_pcre_extra
+	size := unsafe.Sizeof(_extra) // Fixed size
+	re.extra = C.GoBytes(unsafe.Pointer(extra), C.int(size))
+	return nil
 }
 
 // Matcher objects provide a place for storing match results.
