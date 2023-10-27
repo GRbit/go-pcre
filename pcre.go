@@ -491,6 +491,25 @@ func (re *Regexp) Study(flags int) error {
 	return nil
 }
 
+// SetJITStackSize used for change JIT stack size.
+// The arguments are a starting  size  for  the stack, and a maximum size to which it is
+// allowed to grow. See also pcre_assign_jit_stack
+func (re *Regexp) SetJITStackSize(startSize int, maxSize int) error {
+	if len(re.extra) == 0 {
+		return errors.New("can't set JIT stack size: have no extra data")
+	}
+
+	stack := C.pcre_jit_stack_alloc(C.int(startSize), C.int(maxSize))
+	if stack == nil {
+		return errors.New("can't allocate JIT stack")
+	}
+	extra := (*C.pcre_extra)(unsafe.Pointer(&re.extra[0]))
+	C.pcre_assign_jit_stack(extra, nil, unsafe.Pointer(stack))
+	// We should later release stack by pcre_jit_stack_free, but do not it yet
+
+	return nil
+}
+
 // Matcher objects provide a place for storing match results.
 // They can be created by the NewMatcher and NewMatcherString functions,
 // or they can be initialized with Reset or ResetString.
