@@ -129,6 +129,18 @@ func TestMatcher(t *testing.T) {
 	check(`^(.*)$`, "a\000c", "a\000c", "a\000c")
 }
 
+func TestNewMatcherJIT(t *testing.T) {
+	re := MustCompileJIT(`\dG|internet|gprs|[Kk]b|[Mm]b|Gb|lte`, 0, STUDY_JIT_COMPILE)
+	m := re.NewMatcherString(`4GKb`, 0)
+	if !m.Matches {
+		t.Error("The match should be matched")
+	}
+	m = re.NewMatcherString(`Some value`, 0)
+	if m.Matches {
+		t.Error("The match should not be matched")
+	}
+}
+
 func TestPartial(t *testing.T) {
 	re := MustCompile(`^abc`, 0)
 
