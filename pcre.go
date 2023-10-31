@@ -311,7 +311,11 @@ func CompileJIT(pattern string, flagsC, flagsS int) (Regexp, error) {
 		extra: nil,
 	}
 
-	if errS := re.study(flagsS); errS != nil {
+	if (flagsS & STUDY_JIT_COMPILE) == 0 {
+		return re, errors.New("flagsS must contains pcre.STUDY_JIT_COMPILE flag")
+	}
+
+	if errS := re.Study(flagsS); errS != nil {
 		return re, fmt.Errorf("study error: %w", errS)
 	}
 
@@ -486,16 +490,11 @@ func (re Regexp) ReplaceAllString(subj, repl string, flags int) string {
 }
 
 // Study regexp and add pcre_extra information to it, which gives huge
-// speed boost when matching. If an error occurs, return value is
-// non-nil. If flags = 0, don't study at all and return error.
+// speed boost when matching. If an error occurs, return value is non-nil.
 // Studying can be quite a heavy optimization, but it's worth it.
-func (re *Regexp) study(flags int) error {
+func (re *Regexp) Study(flags int) error {
 	if re.extra != nil {
 		return errors.New("regexp already optimized")
-	}
-
-	if flags <= 0 {
-		return errors.New("flag must be > 0")
 	}
 
 	var err *C.char
