@@ -141,6 +141,42 @@ func TestNewMatcherJIT(t *testing.T) {
 	}
 }
 
+func TestCompileAndStudy(t *testing.T) {
+	re, err := Compile(`(Bel[ao]rus)|(Бел[ао]рус)|(БЕЛ[АО]РУС)|Білорусь`, UTF8|CASELESS)
+	if err != nil {
+		t.Error("Compile error", err)
+	}
+	if len(re.extra) != 0 {
+		t.Error("re.extra should be empty")
+	}
+
+	m := re.NewMatcherString("Беларусь: MTS", 0)
+	if !m.Matches {
+		t.Error("The match should be matched")
+	}
+	m = re.NewMatcherString("Other value", 0)
+	if m.Matches {
+		t.Error("The match should not be matched")
+	}
+
+	err = re.Study(0)
+	if err != nil {
+		t.Error("Study error", err)
+	}
+	if len(re.extra) == 0 {
+		t.Error("re.extra should not be empty")
+	}
+
+	m = re.NewMatcherString("Беларусь: MTS", 0)
+	if !m.Matches {
+		t.Error("The match should be matched")
+	}
+	m = re.NewMatcherString("Other value", 0)
+	if m.Matches {
+		t.Error("The match should not be matched")
+	}
+}
+
 func TestPartial(t *testing.T) {
 	re := MustCompile(`^abc`, 0)
 
