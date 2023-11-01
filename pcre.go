@@ -285,30 +285,9 @@ func CompileParse(ptr string) (Regexp, error) {
 // CompileJIT compiles pattern with jit compilation. flagC is Compile flags,
 // flagS is study flag.
 func CompileJIT(pattern string, flagsC, flagsS int) (Regexp, error) {
-	patternC := C.CString(pattern)
-	defer C.free(unsafe.Pointer(patternC))
-
-	if clen := int(C.strlen(patternC)); clen != len(pattern) {
-		return Regexp{}, fmt.Errorf("%s (%d): %s",
-			pattern, clen, "NUL byte in pattern",
-		)
-	}
-
-	var errPtr *C.char
-	var errOffset C.int
-
-	ptr := C.pcre_compile(patternC, C.int(flagsC), &errPtr, &errOffset, nil)
-	if ptr == nil {
-		return Regexp{}, fmt.Errorf("%s (%d): %s",
-			pattern, int(errOffset), C.GoString(errPtr),
-		)
-	}
-	pSize := pcreSize(ptr)
-
-	re := Regexp{
-		expr:  pattern,
-		ptr:   C.GoBytes(unsafe.Pointer(ptr), C.int(pSize)),
-		extra: nil,
+	re, err := Compile(pattern, flagsC)
+	if err != nil {
+		return re, err
 	}
 
 	if (flagsS & STUDY_JIT_COMPILE) == 0 {
