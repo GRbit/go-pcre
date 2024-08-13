@@ -72,6 +72,13 @@ import (
 	"unsafe"
 )
 
+var flagsReg Regexp
+
+func init() {
+	flagsReg = MustCompile("^\\(\\?[a-zA-Z]+?\\)", 0)
+	_ = flagsReg.Study(0)
+}
+
 // Config function returns information about libpcre configuration.
 // Function pass flag f to C.pcre_config() func, and convert returned
 // value to string type.
@@ -190,11 +197,10 @@ func pcreCaptureNames(ptr *C.pcre) []CaptureName {
 // Supported symbols i=CASELESS; m=MULTILINE; s=DOTALL; U=UNGREEDY; J=DUPNAMES;
 // x=EXTENDED; X=EXTRA; D=DOLLAR_ENDONLY; u=UTF8|UCP;
 func ParseFlags(ptr string) (string, int) {
-	fReg := MustCompile("^\\(\\?[a-zA-Z]+?\\)", 0)
 	flags := 0
 
-	for fStr := fReg.FindString(ptr, 0); fStr != ""; ptr = ptr[len(fStr):] {
-		fStr = fReg.FindString(ptr, 0)
+	for fStr := flagsReg.FindString(ptr, 0); fStr != ""; ptr = ptr[len(fStr):] {
+		fStr = flagsReg.FindString(ptr, 0)
 
 		if strings.Contains(fStr, "i") {
 			flags |= CASELESS
@@ -482,11 +488,38 @@ func (re *Regexp) Study(flags int) error {
 		return errors.New(C.GoString(err))
 	}
 
-	defer C.free(unsafe.Pointer(extra))
+	defer func() {
+		if extra != nil {
+			C.free(unsafe.Pointer(extra))
+		}
+	}()
 
-	var _extra C.struct_pcre_extra
-	size := unsafe.Sizeof(_extra) // Fixed size
-	re.extra = C.GoBytes(unsafe.Pointer(extra), C.int(size))
+	if extra == nil {
+		re.extra = nil
+	} else {
+		var _extra C.struct_pcre_extra
+		size := unsafe.Sizeof(_extra) // Fixed size
+		re.extra = C.GoBytes(unsafe.Pointer(extra), C.int(size))
+	}
+
+	return nil
+}
+
+// SetJITStackSize used for change JIT stack size.
+// The arguments are a starting  size  for  the stack, and a maximum size to which it is
+// allowed to grow. See also pcre_assign_jit_stack
+func (re *Regexp) SetJITStackSize(startSize int, maxSize int) error {
+	if len(re.extra) == 0 {
+		return errors.New("can't set JIT stack size: have no extra data")
+	}
+
+	stack := C.pcre_jit_stack_alloc(C.int(startSize), C.int(maxSize))
+	if stack == nil {
+		return errors.New("can't allocate JIT stack")
+	}
+	extra := (*C.pcre_extra)(unsafe.Pointer(&re.extra[0]))
+	C.pcre_assign_jit_stack(extra, nil, unsafe.Pointer(stack))
+	// We should later release stack by pcre_jit_stack_free, but do not it yet
 
 	return nil
 }
@@ -699,7 +732,6 @@ func (m *Matcher) MatchStringWFlags(subject string, flags int) bool {
 }
 
 func checkMatch(rc int) (bool, error) {
-	pref := "%d, pcre_exec: "
 
 	switch {
 	case rc >= 0 || rc == ERROR_PARTIAL:
@@ -707,23 +739,23 @@ func checkMatch(rc int) (bool, error) {
 	case rc == ERROR_NOMATCH:
 		return false, nil
 	case rc == ERROR_NULL:
-		return false, fmt.Errorf(pref+"one or more variables passed to pcre_exec == NULL", ERROR_NULL)
+		return false, fmt.Errorf("%d, pcre_exec: one or more variables passed to pcre_exec == NULL", int(ERROR_NULL))
 	case rc == ERROR_BADOPTION:
-		return false, fmt.Errorf(pref+"An unrecognized bit was set in the options argument", ERROR_BADOPTION)
+		return false, fmt.Errorf("%d, pcre_exec: An unrecognized bit was set in the options argument", int(ERROR_BADOPTION))
 	case rc == ERROR_BADMAGIC:
-		return false, fmt.Errorf(pref+"invalid option flag", ERROR_BADMAGIC)
+		return false, fmt.Errorf("%d, pcre_exec: invalid option flag", int(ERROR_BADMAGIC))
 	case rc == ERROR_UNKNOWN_OPCODE:
-		return false, fmt.Errorf(pref+"an unknown item was encountered in the compiled pattern", ERROR_UNKNOWN_OPCODE)
+		return false, fmt.Errorf("%d, pcre_exec: an unknown item was encountered in the compiled pattern", int(ERROR_UNKNOWN_OPCODE))
 	case rc == ERROR_NOMEMORY:
-		return false, fmt.Errorf(pref+"match limit", ERROR_NOMEMORY)
+		return false, fmt.Errorf("%d, pcre_exec: match limit", int(ERROR_NOMEMORY))
 	case rc == ERROR_MATCHLIMIT:
-		return false, fmt.Errorf(pref+"backtracking (match) limit was reached", ERROR_MATCHLIMIT)
+		return false, fmt.Errorf("%d, pcre_exec: backtracking (match) limit was reached", int(ERROR_MATCHLIMIT))
 	case rc == ERROR_BADUTF8:
-		return false, fmt.Errorf(pref+"string that contains an invalid UTF-8 byte sequence was passed as a subject", ERROR_BADUTF8)
+		return false, fmt.Errorf("%d, pcre_exec: string that contains an invalid UTF-8 byte sequence was passed as a subject", int(ERROR_BADUTF8))
 	case rc == ERROR_RECURSIONLIMIT:
-		return false, fmt.Errorf(pref+"recursion limit", ERROR_RECURSIONLIMIT)
+		return false, fmt.Errorf("%d, pcre_exec: recursion limit", int(ERROR_RECURSIONLIMIT))
 	case rc == ERROR_JIT_STACKLIMIT:
-		return false, fmt.Errorf(pref+"error JIT stack limit", ERROR_JIT_STACKLIMIT)
+		return false, fmt.Errorf("%d, pcre_exec: error JIT stack limit", int(ERROR_JIT_STACKLIMIT))
 	case rc == ERROR_INTERNAL:
 		panic("pcre_exec: INTERNAL ERROR")
 	case rc == ERROR_BADCOUNT:

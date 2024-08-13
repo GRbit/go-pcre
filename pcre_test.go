@@ -224,6 +224,19 @@ func BenchmarkExecWithoutStudy(b *testing.B) {
 	}
 }
 
+func TestJITStackSize(t *testing.T) {
+	re := MustCompileJIT(`aaa|bb|cc`, 0, STUDY_JIT_COMPILE)
+	err := re.SetJITStackSize(64*1024, 1024*1024)
+	if err != nil {
+		t.Errorf("Error call of SetJITStackSize: %s", err)
+	}
+
+	m := re.NewMatcherString(`bb`, 0)
+	if !m.Matches {
+		t.Error("The match should be matched")
+	}
+}
+
 func TestPartial(t *testing.T) {
 	re := MustCompile(`^abc`, 0)
 
