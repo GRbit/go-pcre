@@ -450,7 +450,8 @@ func (re Regexp) NewMatcherString(subject string, flags int) *Matcher {
 
 // ReplaceAll return a copy of a byte slice with pattern matches replaced by repl.
 func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
-	m := re.NewMatcher(bytes, 0)
+	var m Matcher
+	m.init(re)
 	r := make([]byte, 0, len(bytes))
 
 	for m.MatchWFlags(bytes, flags) {
@@ -463,7 +464,8 @@ func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 
 // ReplaceAllString is same as ReplaceAll, but accept strings as arguments
 func (re Regexp) ReplaceAllString(subj, repl string, flags int) string {
-	m := re.NewMatcherString(subj, 0)
+	var m Matcher
+	m.init(re)
 	r := ""
 
 	for m.MatchStringWFlags(subj, flags) {

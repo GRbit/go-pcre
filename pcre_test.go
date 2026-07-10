@@ -264,6 +264,26 @@ func BenchmarkExecWithoutStudy(b *testing.B) {
 	}
 }
 
+func BenchmarkReplaceAll(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := []byte("food fight fools foo")
+	repl := []byte("car")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		re.ReplaceAll(subj, repl, 0)
+	}
+}
+
+func BenchmarkReplaceAllString(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := "food fight fools foo"
+	repl := "car"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		re.ReplaceAllString(subj, repl, 0)
+	}
+}
+
 func TestPartial(t *testing.T) {
 	re := MustCompile(`^abc`, 0)
 
