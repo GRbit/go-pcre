@@ -598,6 +598,15 @@ func (m *Matcher) ExtractString() []string {
 		return nil
 	}
 
+	if m.SubjectS == "" {
+		raw := m.Extract()
+		res := make([]string, len(raw))
+		for i, b := range raw {
+			res[i] = string(b)
+		}
+		return res
+	}
+
 	capturedTexts := make([]string, m.Groups+1)
 	capturedTexts[0] = m.SubjectS
 

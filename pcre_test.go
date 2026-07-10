@@ -453,6 +453,28 @@ func TestExtractString(t *testing.T) {
 	}
 }
 
+func TestExtractStringAfterBytesMatch(t *testing.T) {
+	// Exec ([]byte match) sets SubjectS to "" (pcre.go:523).
+	// ExtractString reads from SubjectS directly — slicing an
+	// empty string with non-zero offsets panics.
+
+	re := MustCompile("b(c)(d)", 0)
+	m := re.NewMatcher([]byte("abcdef"), 0) // calls Exec internally
+
+	// GroupString has a fallback when SubjectS is ""
+	if g := m.GroupString(1); g != "c" {
+		t.Errorf("GroupString(1): got %q, want %q", g, "c")
+	}
+
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("ExtractString panicked: %v", r)
+		}
+	}()
+
+	_ = m.ExtractString()
+}
+
 func TestReplaceAll(t *testing.T) {
 	re := MustCompile("foo", 0)
 	// Don't change at ends.
