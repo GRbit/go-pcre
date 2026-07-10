@@ -121,7 +121,7 @@ func ConfigAll() string {
 	C.pcre_config(C.PCRE_CONFIG_UTF32, unsafe.Pointer(&i))
 	ret += fmt.Sprintf("utf32: %d\n", int32(i))
 	C.pcre_config(C.PCRE_CONFIG_UTF8, unsafe.Pointer(&i))
-	ret += fmt.Sprintf("utf8: %d", int32(i))
+	ret += fmt.Sprintf("utf8: %d\n", int32(i))
 	C.pcre_config(C.PCRE_CONFIG_UNICODE_PROPERTIES, unsafe.Pointer(&i))
 	ret += fmt.Sprintf("unicode_properties: %d\n", int32(i))
 
@@ -713,23 +713,23 @@ func checkMatch(rc int) (bool, error) {
 	case rc == ERROR_NOMATCH:
 		return false, nil
 	case rc == ERROR_NULL:
-		return false, fmt.Errorf("rc=%d, pcre_exec: one or more variables passed to pcre_exec == NULL", rc)
+		return false, fmt.Errorf("%d, pcre_exec: one or more variables passed to pcre_exec == NULL", rc)
 	case rc == ERROR_BADOPTION:
-		return false, fmt.Errorf("rc=%d, pcre_exec: unrecognized bit set in the options argument", rc)
+		return false, fmt.Errorf("%d, pcre_exec: An unrecognized bit was set in the options argument", rc)
 	case rc == ERROR_BADMAGIC:
-		return false, fmt.Errorf("rc=%d, pcre_exec: invalid option flag", rc)
+		return false, fmt.Errorf("%d, pcre_exec: invalid option flag", rc)
 	case rc == ERROR_UNKNOWN_OPCODE:
-		return false, fmt.Errorf("rc=%d, pcre_exec: unknown opcode in compiled pattern", rc)
+		return false, fmt.Errorf("%d, pcre_exec: an unknown item was encountered in the compiled pattern", rc)
 	case rc == ERROR_NOMEMORY:
-		return false, fmt.Errorf("rc=%d, pcre_exec: match limit", rc)
+		return false, fmt.Errorf("%d, pcre_exec: match limit", rc)
 	case rc == ERROR_MATCHLIMIT:
-		return false, fmt.Errorf("rc=%d, pcre_exec: backtracking (match) limit was reached", rc)
+		return false, fmt.Errorf("%d, pcre_exec: backtracking (match) limit was reached", rc)
 	case rc == ERROR_BADUTF8:
-		return false, fmt.Errorf("rc=%d, pcre_exec: invalid UTF-8 byte sequence in subject", rc)
+		return false, fmt.Errorf("%d, pcre_exec: string that contains an invalid UTF-8 byte sequence was passed as a subject", rc)
 	case rc == ERROR_RECURSIONLIMIT:
-		return false, fmt.Errorf("rc=%d, pcre_exec: recursion limit", rc)
+		return false, fmt.Errorf("%d, pcre_exec: recursion limit", rc)
 	case rc == ERROR_JIT_STACKLIMIT:
-		return false, fmt.Errorf("rc=%d, pcre_exec: JIT stack limit", rc)
+		return false, fmt.Errorf("%d, pcre_exec: error JIT stack limit", rc)
 	case rc == ERROR_INTERNAL:
 		panic("pcre_exec: INTERNAL ERROR")
 	case rc == ERROR_BADCOUNT:
