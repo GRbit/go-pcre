@@ -374,3 +374,27 @@ func TestReplaceAll(t *testing.T) {
 		t.Error("ReplaceAll2", result)
 	}
 }
+
+func TestReplaceAllString(t *testing.T) {
+	re := MustCompile("foo", 0)
+	tests := []struct {
+		subj, repl, want string
+	}{
+		{"I like foods.", "car", "I like cards."},
+		{"food fight fools foo", "car", "card fight carls car"},
+		{"no match here", "car", "no match here"},
+		{"foo bar", "car", "car bar"},
+		{"bar foo", "car", "bar car"},
+		{"foofoo", "car", "carcar"},
+		{"foo", "car", "car"},
+		{"foo and foo and foo", "car", "car and car and car"},
+		{"", "car", ""},
+		{"foobar", "", "bar"},
+	}
+	for _, tc := range tests {
+		got := re.ReplaceAllString(tc.subj, tc.repl, 0)
+		if got != tc.want {
+			t.Errorf("ReplaceAllString(%q, %q): got %q, want %q", tc.subj, tc.repl, got, tc.want)
+		}
+	}
+}

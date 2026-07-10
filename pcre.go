@@ -461,7 +461,7 @@ func (re Regexp) ReplaceAllString(subj, repl string, flags int) string {
 	r := ""
 
 	for m.MatchStringWFlags(subj, flags) {
-		r += r + subj[:m.oVector[0]] + repl
+		r += subj[:m.oVector[0]] + repl
 		subj = subj[m.oVector[1]:]
 	}
 
