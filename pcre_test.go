@@ -334,6 +334,17 @@ func TestFindIndex(t *testing.T) {
 	}
 }
 
+func TestInitWithZeroValue(t *testing.T) {
+	re1 := MustCompile("foo", 0)
+	var re2 Regexp // zero value — ptr is nil
+
+	var m Matcher
+	m.init(re1) // m.re.ptr is now non-nil
+
+	// This must not panic: &re2.ptr[0] is guarded alongside the len check.
+	m.init(re2)
+}
+
 func TestFindAllIndexEmptyMatch(t *testing.T) {
 	// An empty-matching pattern causes FindAllIndex to infinite-loop
 	// because offset never advances when oVector[0] == oVector[1].

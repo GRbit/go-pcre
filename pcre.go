@@ -607,7 +607,7 @@ func (m *Matcher) ExtractString() []string {
 
 func (m *Matcher) init(re Regexp) {
 	m.Matches = false
-	if len(m.re.ptr) != 0 && &m.re.ptr[0] == &re.ptr[0] {
+	if len(m.re.ptr) != 0 && len(re.ptr) != 0 && &m.re.ptr[0] == &re.ptr[0] {
 		// Skip group count extraction if the matcher has
 		// already been initialized with the same regular
 		// expression.
@@ -615,7 +615,9 @@ func (m *Matcher) init(re Regexp) {
 	}
 
 	m.re = re
-	m.Groups = re.Groups()
+	if re.ptr != nil {
+		m.Groups = re.Groups()
+	}
 
 	if oVectorLen := 3 * (1 + m.Groups); len(m.oVector) < oVectorLen {
 		m.oVector = make([]int32, int32(oVectorLen))
