@@ -488,6 +488,10 @@ func (re *Regexp) Study(flags int) error {
 		return errors.New(C.GoString(err))
 	}
 
+	if extra == nil {
+		return nil // no optimization data available, not an error
+	}
+
 	defer C.free(unsafe.Pointer(extra))
 
 	var _extra C.struct_pcre_extra

@@ -142,6 +142,45 @@ func TestNewMatcherJIT(t *testing.T) {
 	}
 }
 
+func TestStudyNullReturn(t *testing.T) {
+	// pcre_study can return NULL without setting an error when no optimization
+	// data exists for a pattern. The current code (pcre.go:495) passes the NULL
+	// pointer to C.GoBytes, which reads from address 0 — undefined behavior.
+	// Go's runtime may catch this as a panic, or it may crash the process.
+
+	patterns := []string{
+		"",
+		"a",
+		"b",
+		".*",
+		".",
+		"^$",
+	}
+
+	for _, p := range patterns {
+		t.Run(p, func(t *testing.T) {
+			re, err := Compile(p, 0)
+			if err != nil {
+				t.Skipf("compile: %v", err)
+			}
+
+			defer func() {
+				if r := recover(); r != nil {
+					t.Errorf("Study on %q panicked (pcre_study likely returned NULL): %v", p, r)
+				}
+			}()
+
+			err = re.Study(0)
+			if err != nil {
+				t.Logf("Study error: %v", err)
+				return
+			}
+
+			t.Logf("extra len=%d (0 means pcre_study returned NULL, which is the bug trigger)", len(re.extra))
+		})
+	}
+}
+
 func TestCompileAndStudy(t *testing.T) {
 	re, err := Compile(`(Bel[ao]rus)|(Бел[ао]рус)|(БЕЛ[АО]РУС)|Білорусь`, UTF8|CASELESS)
 	if err != nil {
