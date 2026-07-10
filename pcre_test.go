@@ -188,7 +188,7 @@ func BenchmarkStudyAndExec(b *testing.B) {
 	m := re.NewMatcher(subj, 0)
 	for i := 0; i < b.N; i++ {
 		m.MatchWFlags(subj, 0)
-		if m == nil {
+		if !m.Matches {
 			b.Error("The match should be matched")
 		}
 	}
@@ -205,7 +205,7 @@ func BenchmarkExecJIT(b *testing.B) {
 	m := re.NewMatcher(subj, 0)
 	for i := 0; i < b.N; i++ {
 		m.MatchWFlags(subj, 0)
-		if m == nil {
+		if !m.Matches {
 			b.Error("The match should be matched")
 		}
 	}
@@ -218,7 +218,7 @@ func BenchmarkExecWithoutStudy(b *testing.B) {
 	m := re.NewMatcher(subj, 0)
 	for i := 0; i < b.N; i++ {
 		m.MatchWFlags(subj, 0)
-		if m == nil {
+		if !m.Matches {
 			b.Error("The match should be matched")
 		}
 	}
