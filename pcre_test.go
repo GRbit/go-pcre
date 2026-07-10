@@ -4,6 +4,7 @@ package pcre
 
 import (
 	"testing"
+	"time"
 )
 
 func TestCompile(t *testing.T) {
@@ -330,6 +331,27 @@ func TestFindIndex(t *testing.T) {
 	}
 	if i[1] != 4 {
 		t.Error("FindIndex end", i[1])
+	}
+}
+
+func TestFindAllIndexEmptyMatch(t *testing.T) {
+	// An empty-matching pattern causes FindAllIndex to infinite-loop
+	// because offset never advances when oVector[0] == oVector[1].
+	// We use a goroutine + timeout to safely detect the hang.
+
+	re := MustCompile("", 0) // matches empty string at every position
+
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		re.FindAllIndex([]byte("abc"), 0)
+	}()
+
+	select {
+	case <-done:
+		// completed — fix is in place
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("FindAllIndex with empty pattern appears to hang (infinite loop)")
 	}
 }
 

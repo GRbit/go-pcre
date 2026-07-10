@@ -360,9 +360,15 @@ func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
 	m := re.NewMatcher(bytes, flags)
 	offset := 0
 
-	for m.MatchWFlags(bytes[offset:], flags) {
-		r = append(r, []int{offset + int(m.oVector[0]), offset + int(m.oVector[1])})
-		offset += int(m.oVector[1])
+	for offset <= len(bytes) && m.MatchWFlags(bytes[offset:], flags) {
+		start := offset + int(m.oVector[0])
+		end := offset + int(m.oVector[1])
+		r = append(r, []int{start, end})
+		if end > offset {
+			offset = end
+		} else {
+			offset++
+		}
 	}
 
 	return
