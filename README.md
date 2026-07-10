@@ -49,6 +49,34 @@ sudo apt-get install libpcre3-dev
 go get github.com/GRbit/go-pcre
 ```
 
+## Building on newer Linux distributions
+
+Recent Linux distributions no longer ship the legacy **PCRE 8.x** development package (`libpcre3-dev`). This project depends on the original PCRE library rather than PCRE2, so the library must be built manually.
+
+```bash
+wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz/download \
+    -O pcre-8.45.tar.gz
+
+tar xf pcre-8.45.tar.gz
+cd pcre-8.45
+
+./configure \
+    --prefix=/usr/local \
+    --enable-utf \
+    --enable-unicode-properties \
+    --enable-shared
+
+make -j"$(nproc)"
+sudo make install
+sudo ldconfig
+```
+
+### If `pkg-config` cannot find `libpcre`
+
+```bash
+export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
+```
+
 ## Usage
 
 Go programs that depend on this package should import this package as
