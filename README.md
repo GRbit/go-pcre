@@ -1,5 +1,8 @@
-go-pcre
-===============
+# go-pcre
+
+[![Go Reference](https://pkg.go.dev/badge/github.com/GRbit/go-pcre.svg)](https://pkg.go.dev/github.com/GRbit/go-pcre)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/GRbit/go-pcre)](https://github.com/GRbit/go-pcre)
+[![License](https://img.shields.io/github/license/GRbit/go-pcre)](LICENSE)
 
 This package provides Perl-Compatible RegularExpression
 support in Go using `libpcre` or `libpcre++`.
@@ -17,7 +20,7 @@ to see the difference.
 
 As you can see, this library is almost an order
 of magnitude faster than standard one and
-3-4 times faster tahn pcre without JIT compilation.
+3-4 times faster than pcre without JIT compilation.
 
 ## Interface / API
 
@@ -33,7 +36,7 @@ the closer I am to implementing this idea.
 
 ## Documentation
 
-Use [godoc](https://godoc.org/github.com/GRbit/go-pcre).
+Use [pkg.go.dev](https://pkg.go.dev/github.com/GRbit/go-pcre).
 
 ## Installation
 
@@ -43,7 +46,7 @@ Use [godoc](https://godoc.org/github.com/GRbit/go-pcre).
 
 ```bash
 sudo apt-get install libpcre3-dev
-go get github.com/GRbit/go-pcre/
+go get github.com/GRbit/go-pcre
 ```
 
 ## Usage
@@ -53,7 +56,7 @@ follows to allow automatic downloading:
 
 ```go
 import (
-  "github.com/GRbit/go-pcre/"
+  "github.com/GRbit/go-pcre"
 )
 ```
 
