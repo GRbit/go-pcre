@@ -512,3 +512,21 @@ func TestReplaceAllString(t *testing.T) {
 		}
 	}
 }
+
+func TestGroupMutualRecursion(t *testing.T) {
+	re := MustCompile("(.)", 0)
+	var m Matcher
+	m.init(re)
+
+	done := make(chan struct{})
+	go func() {
+		m.Group(0)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Group(0) did not return (infinite recursion / timeout)")
+	}
+}

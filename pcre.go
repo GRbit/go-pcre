@@ -646,6 +646,9 @@ func (m *Matcher) init(re Regexp) {
 // are not present return a nil slice.
 func (m *Matcher) Group(group int) []byte {
 	if m.SubjectB == nil {
+		if !m.Matches {
+			return nil
+		}
 		return []byte(m.GroupString(group))
 	}
 
@@ -676,6 +679,9 @@ func (m *Matcher) GroupIndices(group int) []int {
 // GroupString is same as Group, but returns string
 func (m *Matcher) GroupString(group int) string {
 	if m.SubjectS == "" {
+		if !m.Matches {
+			return ""
+		}
 		return string(m.Group(group))
 	}
 
