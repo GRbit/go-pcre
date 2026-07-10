@@ -355,7 +355,7 @@ func MustCompileParseJIT(pattern string, flags int) (re Regexp) {
 	return
 }
 
-// FindAllIndex returns the start and end of the first match.
+// FindAllIndex returns successive matches of the expression.
 func (re *Regexp) FindAllIndex(bytes []byte, flags int) (r [][]int) {
 	m := re.NewMatcher(bytes, flags)
 	offset := 0
@@ -405,8 +405,8 @@ func (re Regexp) Groups() int {
 	return int(pcreGroups((*C.pcre)(unsafe.Pointer(&re.ptr[0]))))
 }
 
-// Names return the names of capturing groups in the compiled regexp pattern.
-// Each item contains name and index of capturing parentheses
+// CaptureNames returns the names of capturing groups in the compiled regexp
+// pattern. Each item contains name and index of capturing parentheses.
 func (re Regexp) CaptureNames() []CaptureName {
 	if re.ptr == nil {
 		panic("Regexp.CaptureNames: uninitialized")
