@@ -409,8 +409,10 @@ func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 	return nil
 }
 
-// FindString returns the start and end of the first match, or nil if no match.
-// loc[0] is the start and loc[1] is the end.
+// FindString returns the text of the first match, or "" if there is no
+// match. Note that "" is also returned for a valid empty-width match, so a
+// zero result does not necessarily mean the pattern did not match; use
+// FindIndex to distinguish the two.
 func (re *Regexp) FindString(s string, flags int) string {
 	m := re.NewMatcher([]byte(s), flags)
 	if m.Matches {
@@ -509,39 +511,12 @@ func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 	return append(r, bytes...)
 }
 
-// ReplaceAllString is same as ReplaceAll, but accept strings as arguments
+// ReplaceAllString is same as ReplaceAll, but accept strings as arguments.
+// It delegates to ReplaceAll: converting the subject once is far cheaper
+// than the string-slicing loop it used to run, which re-converted the
+// remaining subject to []byte inside every ExecString call.
 func (re Regexp) ReplaceAllString(subj, repl string, flags int) string {
-	var m Matcher
-	m.init(re)
-	r := ""
-
-	// Same global-match loop as ReplaceAll; see the comment there.
-	retryFlags := 0
-	for {
-		if !m.MatchStringWFlags(subj, flags|retryFlags) {
-			if retryFlags == 0 || len(subj) == 0 {
-				break
-			}
-			r += subj[:1]
-			subj = subj[1:]
-			retryFlags = 0
-			continue
-		}
-
-		r += subj[:m.oVector[0]] + repl
-		empty := m.oVector[0] == m.oVector[1]
-		subj = subj[m.oVector[1]:]
-		if !empty {
-			retryFlags = 0
-			continue
-		}
-		if len(subj) == 0 {
-			return r // empty match at the end of the subject
-		}
-		retryFlags = NOTEMPTY_ATSTART | ANCHORED
-	}
-
-	return r + subj
+	return string(re.ReplaceAll([]byte(subj), []byte(repl), flags))
 }
 
 // Study regexp and add pcre_extra information to it, which gives huge
@@ -723,6 +698,7 @@ func (m *Matcher) init(re Regexp) {
 // Group 0 is the part of the subject which matches the whole pattern;
 // the first actual capture group is numbered 1. Capture groups which
 // are not present return a nil slice.
+// Panics with an index-out-of-range error if group exceeds Groups.
 func (m *Matcher) Group(group int) []byte {
 	if m.SubjectB == nil {
 		if !m.Matches {
@@ -745,6 +721,7 @@ func (m *Matcher) Group(group int) []byte {
 // or MatchString). Group 0 is the part of the subject which matches
 // the whole pattern; the first actual capture group is numbered 1.
 // Capture groups which are not present return a nil slice.
+// Panics with an index-out-of-range error if group exceeds Groups.
 func (m *Matcher) GroupIndices(group int) []int {
 	start := m.oVector[2*group]
 	end := m.oVector[2*group+1]
@@ -755,7 +732,8 @@ func (m *Matcher) GroupIndices(group int) []int {
 	return nil
 }
 
-// GroupString is same as Group, but returns string
+// GroupString is same as Group, but returns string.
+// Panics with an index-out-of-range error if group exceeds Groups.
 func (m *Matcher) GroupString(group int) string {
 	if m.SubjectS == "" {
 		if !m.Matches {
@@ -862,8 +840,8 @@ func (m *Matcher) name2index(name string) (group int, err error) {
 }
 
 // Named returns the value of the named capture group. This is a nil slice
-// if the capture group is not present. Panics if the name does not
-// refer to a group.
+// if the capture group is not present. A non-nil error is returned if the
+// name does not refer to a group.
 func (m *Matcher) Named(group string) (g []byte, err error) {
 	groupNum, err := m.name2index(group)
 	if err != nil {
@@ -873,8 +851,10 @@ func (m *Matcher) Named(group string) (g []byte, err error) {
 	return m.Group(groupNum), nil
 }
 
-// NamedPresent returns true if the named capture group is present. Panics if the
-// name does not refer to a group.
+// NamedPresent returns true if the named capture group is present. It
+// returns false both when the group did not participate in the match and
+// when the name does not refer to a group at all; use Named to tell those
+// two cases apart.
 func (m *Matcher) NamedPresent(group string) (pres bool) {
 	groupNum, err := m.name2index(group)
 	if err != nil {
@@ -884,9 +864,9 @@ func (m *Matcher) NamedPresent(group string) (pres bool) {
 	return m.Present(groupNum)
 }
 
-// NamedString returns the value of the named capture group, or an empty string
-// if the capture group is not present. Panics if the name does not
-// refer to a group.
+// NamedString returns the value of the named capture group, or an empty
+// string if the capture group is not present. A non-nil error is returned
+// if the name does not refer to a group.
 func (m *Matcher) NamedString(group string) (g string, err error) {
 	groupNum, err := m.name2index(group)
 	if err != nil {
@@ -900,6 +880,7 @@ func (m *Matcher) NamedString(group string) (g string, err error) {
 // match (performed by Matcher, MatcherString, Reset, ResetString,
 // Match, or MatchString). Group numbers start at 1. A capture group
 // can be present and match the empty string.
+// Panics with an index-out-of-range error if group exceeds Groups.
 func (m *Matcher) Present(group int) bool {
 	return m.oVector[2*group] >= 0
 }

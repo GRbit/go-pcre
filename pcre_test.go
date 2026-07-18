@@ -4,6 +4,7 @@ package pcre
 
 import (
 	"runtime"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -396,6 +397,15 @@ func BenchmarkReplaceAll(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		re.ReplaceAll(subj, repl, 0)
+	}
+}
+
+func BenchmarkReplaceAllStringManyMatches(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := strings.Repeat("foo bar baz ", 1000)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		re.ReplaceAllString(subj, "car", 0)
 	}
 }
 
