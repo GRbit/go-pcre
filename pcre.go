@@ -25,6 +25,14 @@
 // Most Matcher.*String methods are just links to []byte methods, so keep
 // this in mind.
 //
+// Concurrency: a Regexp, once fully constructed, is safe for concurrent
+// matching from multiple goroutines. "Fully constructed" means Compile has
+// returned and, if you use it, Study has completed: Study mutates the Regexp
+// in place, so calling it concurrently with matching (or with another Study
+// of the same Regexp) is a data race. A Matcher is stateful and must only be
+// used by one goroutine at a time; give each goroutine its own Matcher —
+// creating one is cheap compared to compiling.
+//
 // For details on the regular expression language implemented by this
 // package and the flags defined below see the PCRE documentation.
 // http://www.pcre.org/pcre.txt
@@ -272,6 +280,8 @@ func freeExtra(h *extraHandle) {
 
 // Regexp is a reference to a compiled regular expression.
 // Use Compile or MustCompile to create such objects.
+// Once fully constructed (compiled and, if desired, studied) it is safe
+// for concurrent use by multiple goroutines; see the package comment.
 type Regexp struct {
 	expr string // as passed to Compile
 
@@ -540,6 +550,10 @@ func (re Regexp) ReplaceAllString(subj, repl string, flags int) string {
 // Study regexp and add pcre_extra information to it, which gives huge
 // speed boost when matching. If an error occurs, return value is non-nil.
 // Studying can be quite a heavy optimization, but it's worth it.
+//
+// Study mutates the Regexp in place: it must complete before the Regexp is
+// shared with other goroutines. Calling it concurrently with matching, or
+// with another Study of the same Regexp, is a data race.
 func (re *Regexp) Study(flags int) error {
 	if re.extra != nil {
 		return errors.New("regexp already optimized")
@@ -569,6 +583,8 @@ func (re *Regexp) Study(flags int) error {
 // Matcher objects provide a place for storing match results.
 // They can be created by the NewMatcher and NewMatcherString functions,
 // or they can be initialized with Reset or ResetString.
+// A Matcher is not safe for concurrent use: it holds the state of the last
+// match. Use one Matcher per goroutine.
 type Matcher struct {
 	re       Regexp
 	Groups   int

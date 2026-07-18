@@ -6,6 +6,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -281,6 +282,35 @@ func TestStudiedRegexpUsableAfterGC(t *testing.T) {
 	if !m.MatchStringWFlags("Беларусь", 0) {
 		t.Error("match after GC failed: study data was freed while still referenced")
 	}
+}
+
+func TestConcurrentMatching(t *testing.T) {
+	// The documented contract: once fully constructed (compiled and, if
+	// desired, studied), a Regexp may be shared by concurrently matching
+	// goroutines, each using its own Matcher. Run under -race, this test
+	// validates that promise.
+	re := MustCompileJIT(`(Bel[ao]rus)|(Бел[ао]рус)`, UTF8|CASELESS, STUDY_JIT_COMPILE)
+
+	var wg sync.WaitGroup
+	for g := 0; g < 8; g++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			var m Matcher
+			for i := 0; i < 200; i++ {
+				m.ResetString(re, "Беларусь: MTS", 0)
+				if !m.Matches {
+					t.Error("should match")
+					return
+				}
+				if re.FindString("say Беларусь", 0) == "" {
+					t.Error("FindString should match")
+					return
+				}
+			}
+		}()
+	}
+	wg.Wait()
 }
 
 func TestParseFlags(t *testing.T) {
