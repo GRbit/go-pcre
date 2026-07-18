@@ -67,8 +67,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"runtime"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"unsafe"
 )
 
@@ -76,6 +78,10 @@ import (
 const sizeofPcreExtra = C.sizeof_struct_pcre_extra
 
 var studyDataOffset = unsafe.Offsetof(C.struct_pcre_extra{}.study_data)
+
+// studiesFreed counts pcre_free_study calls; it exists for tests to observe
+// that finalizers actually release study data.
+var studiesFreed uint64
 
 // Config function returns information about libpcre configuration.
 // Function pass flag f to C.pcre_config() func, and convert returned
@@ -233,13 +239,27 @@ func ParseFlags(ptr string) (string, int) {
 	return ptr, flags
 }
 
+// extraHandle owns the pcre_extra block returned by pcre_study. The block
+// (and the JIT code it may reference) is C memory that only pcre_free_study
+// can release, so it is kept alive here and freed by a finalizer once the
+// last Regexp copy referring to it becomes unreachable.
+type extraHandle struct {
+	p *C.pcre_extra
+}
+
+func freeExtra(h *extraHandle) {
+	C.pcre_free_study(h.p)
+	h.p = nil
+	atomic.AddUint64(&studiesFreed, 1)
+}
+
 // Regexp is a reference to a compiled regular expression.
 // Use Compile or MustCompile to create such objects.
 type Regexp struct {
 	expr string // as passed to Compile
 
 	ptr   []byte
-	extra []byte
+	extra *extraHandle
 }
 
 // Compile try to compile the pattern. If an error occurs, the second return
@@ -499,37 +519,15 @@ func (re *Regexp) Study(flags int) error {
 		return nil // no optimization data available, not an error
 	}
 
-	defer C.free(unsafe.Pointer(extra))
-
-	// pcre_study returns a single allocation holding the pcre_extra struct
-	// immediately followed by its pcre_study_data (whose first uint32 field
-	// is its total size), with extra->study_data pointing at the latter.
-	// Copy the whole block and re-point study_data into the copy; otherwise
-	// it would keep referencing the C block freed above.
-	size := C.int(sizeofPcreExtra)
-	if extra.flags&C.PCRE_EXTRA_STUDY_DATA != 0 && extra.study_data != nil {
-		size += C.int(*(*uint32)(extra.study_data))
-	}
-
-	re.extra = C.GoBytes(unsafe.Pointer(extra), size)
-	re.patchStudyData()
+	// The block must stay alive as long as this Regexp is used: it holds the
+	// study data pcre_exec reads and may reference JIT-compiled code. Both
+	// can only be released together via pcre_free_study, which the finalizer
+	// calls once no Regexp copy references the handle anymore.
+	h := &extraHandle{p: extra}
+	runtime.SetFinalizer(h, freeExtra)
+	re.extra = h
 
 	return nil
-}
-
-// patchStudyData points the study_data field of the pcre_extra copy held in
-// re.extra at the study data stored later in the same slice. Called after the
-// copy is created and again before every pcre_exec, so the pointer is correct
-// even if the slice bytes were duplicated since the last patch.
-func (re *Regexp) patchStudyData() {
-	if len(re.extra) <= sizeofPcreExtra {
-		return
-	}
-
-	extra := (*C.struct_pcre_extra)(unsafe.Pointer(&re.extra[0]))
-	if extra.flags&C.PCRE_EXTRA_STUDY_DATA != 0 {
-		extra.study_data = unsafe.Pointer(&re.extra[sizeofPcreExtra])
-	}
 }
 
 // Matcher objects provide a place for storing match results.
@@ -588,13 +586,17 @@ func (m *Matcher) ExecString(subject string, flags int) int {
 func (m *Matcher) exec(subjectP *C.char, length, flags int) int {
 	var extra *C.pcre_extra
 	if m.re.extra != nil {
-		m.re.patchStudyData()
-		extra = (*C.pcre_extra)(unsafe.Pointer(&m.re.extra[0]))
+		extra = m.re.extra.p
 	}
 
 	rc := C.pcre_exec((*C.pcre)(unsafe.Pointer(&m.re.ptr[0])), extra,
 		subjectP, C.int(length), 0, C.int(flags),
 		(*C.int)(unsafe.Pointer(&m.oVector[0])), C.int(len(m.oVector)))
+
+	// Keep the handle (and thus the C extra block) alive for the duration of
+	// the pcre_exec call above; without this the finalizer could free it
+	// mid-call if the Matcher itself is no longer referenced afterwards.
+	runtime.KeepAlive(m.re.extra)
 
 	return int(rc)
 }

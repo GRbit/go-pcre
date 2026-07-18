@@ -3,6 +3,8 @@
 package pcre
 
 import (
+	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
@@ -177,7 +179,7 @@ func TestStudyNullReturn(t *testing.T) {
 				return
 			}
 
-			t.Logf("extra len=%d (0 means pcre_study returned NULL, which is the bug trigger)", len(re.extra))
+			t.Logf("has extra=%v (false means pcre_study returned NULL, which is the bug trigger)", re.extra != nil)
 		})
 	}
 }
@@ -197,20 +199,54 @@ func TestStudyDataStaysValid(t *testing.T) {
 		t.Fatal("pcre_study produced no data for this pattern; pick a pattern that has study data")
 	}
 
-	if len(re.extra) <= sizeofPcreExtra {
-		t.Fatalf("re.extra holds only the pcre_extra struct (%d bytes); study data was not copied", len(re.extra))
-	}
-
-	start := uintptr(unsafe.Pointer(&re.extra[0]))
-	end := start + uintptr(len(re.extra))
-	studyData := *(*uintptr)(unsafe.Pointer(&re.extra[studyDataOffset]))
-	if studyData < start || studyData >= end {
-		t.Errorf("extra.study_data (%#x) points outside re.extra [%#x,%#x): dangling pointer to freed C memory",
-			studyData, start, end)
+	// pcre_study lays out its single allocation as [pcre_extra | study_data],
+	// so a valid, unfreed block has study_data pointing right behind the
+	// struct. Any other value means the block was freed or mangled.
+	base := uintptr(unsafe.Pointer(re.extra.p))
+	studyData := *(*uintptr)(unsafe.Add(unsafe.Pointer(re.extra.p), studyDataOffset))
+	if studyData != base+sizeofPcreExtra {
+		t.Errorf("extra.study_data (%#x) does not point right behind pcre_extra (%#x+%d): block freed or corrupted",
+			studyData, base, sizeofPcreExtra)
 	}
 
 	if !re.NewMatcherString("Беларусь", 0).Matches {
 		t.Error("studied regexp failed to match")
+	}
+}
+
+func TestStudyFreedOnGC(t *testing.T) {
+	// Study data (including JIT-compiled code) is C memory; it must be
+	// released via pcre_free_study once the Regexp is garbage collected,
+	// otherwise every studied pattern leaks for the life of the process.
+	before := atomic.LoadUint64(&studiesFreed)
+
+	for i := 0; i < 32; i++ {
+		re := MustCompileJIT(`\d+foo`, 0, STUDY_JIT_COMPILE)
+		if !re.NewMatcherString("123foo", 0).Matches {
+			t.Fatal("should match")
+		}
+	}
+
+	deadline := time.Now().Add(2 * time.Second)
+	for atomic.LoadUint64(&studiesFreed) == before {
+		if time.Now().After(deadline) {
+			t.Fatalf("no study data freed after GC: study/JIT memory leaks (freed count still %d)", before)
+		}
+		runtime.GC()
+		time.Sleep(time.Millisecond)
+	}
+}
+
+func TestStudiedRegexpUsableAfterGC(t *testing.T) {
+	// The reverse guarantee: as long as anything (here: a Matcher) still
+	// references the Regexp, GC must NOT free the study data.
+	m := MustCompileJIT(`(Bel[ao]rus)|(Бел[ао]рус)`, UTF8|CASELESS, STUDY_JIT_COMPILE).
+		NewMatcherString("Беларусь", 0)
+	runtime.GC()
+	runtime.GC()
+
+	if !m.MatchStringWFlags("Беларусь", 0) {
+		t.Error("match after GC failed: study data was freed while still referenced")
 	}
 }
 
@@ -219,7 +255,7 @@ func TestCompileAndStudy(t *testing.T) {
 	if err != nil {
 		t.Error("Compile error", err)
 	}
-	if len(re.extra) != 0 {
+	if re.extra != nil {
 		t.Error("re.extra should be empty")
 	}
 
@@ -236,7 +272,7 @@ func TestCompileAndStudy(t *testing.T) {
 	if err != nil {
 		t.Error("Study error", err)
 	}
-	if len(re.extra) == 0 {
+	if re.extra == nil {
 		t.Error("re.extra should not be empty")
 	}
 
