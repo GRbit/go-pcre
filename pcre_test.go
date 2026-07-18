@@ -250,6 +250,31 @@ func TestStudiedRegexpUsableAfterGC(t *testing.T) {
 	}
 }
 
+func TestMatcherPicksUpStudyData(t *testing.T) {
+	// Matcher.init has a fast path that skips re-initialization when handed
+	// the same compiled pattern. It must not skip when the Regexp has been
+	// Studied since — otherwise the study/JIT data is silently ignored.
+	re := MustCompile(`(Bel[ao]rus)|(Бел[ао]рус)`, UTF8|CASELESS)
+
+	var m Matcher
+	m.Reset(re, []byte("Беларусь"), 0)
+
+	if err := re.Study(STUDY_JIT_COMPILE); err != nil {
+		t.Fatal(err)
+	}
+	if re.extra == nil {
+		t.Fatal("study produced no data; the test needs a pattern that has some")
+	}
+
+	m.Reset(re, []byte("Беларусь"), 0)
+	if m.re.extra == nil {
+		t.Error("Matcher kept the pre-Study copy of the Regexp: study/JIT data is silently ignored")
+	}
+	if !m.Matches {
+		t.Error("should match")
+	}
+}
+
 func TestCompileAndStudy(t *testing.T) {
 	re, err := Compile(`(Bel[ao]rus)|(Бел[ао]рус)|(БЕЛ[АО]РУС)|Білорусь`, UTF8|CASELESS)
 	if err != nil {

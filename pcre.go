@@ -700,10 +700,12 @@ func (m *Matcher) ExtractString() []string {
 
 func (m *Matcher) init(re Regexp) {
 	m.Matches = false
-	if len(m.re.ptr) != 0 && len(re.ptr) != 0 && &m.re.ptr[0] == &re.ptr[0] {
+	if len(m.re.ptr) != 0 && len(re.ptr) != 0 && &m.re.ptr[0] == &re.ptr[0] &&
+		m.re.extra == re.extra {
 		// Skip group count extraction if the matcher has
 		// already been initialized with the same regular
-		// expression.
+		// expression. The extra handle is compared too: the same pattern
+		// gains one when it is Studied, and the matcher must pick it up.
 		return
 	}
 
