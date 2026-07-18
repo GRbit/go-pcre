@@ -479,9 +479,32 @@ func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 	m.init(re)
 	r := make([]byte, 0, len(bytes))
 
-	for m.MatchWFlags(bytes, flags) {
+	// Canonical PCRE global-match loop (see pcredemo.c), which is also what
+	// Perl's s///g does: after an empty match, retry at the same position
+	// requiring a non-empty match; if none, copy one byte and keep scanning.
+	retryFlags := 0
+	for {
+		if !m.MatchWFlags(bytes, flags|retryFlags) {
+			if retryFlags == 0 || len(bytes) == 0 {
+				break
+			}
+			r = append(r, bytes[0])
+			bytes = bytes[1:]
+			retryFlags = 0
+			continue
+		}
+
 		r = append(append(r, bytes[:m.oVector[0]]...), repl...)
+		empty := m.oVector[0] == m.oVector[1]
 		bytes = bytes[m.oVector[1]:]
+		if !empty {
+			retryFlags = 0
+			continue
+		}
+		if len(bytes) == 0 {
+			return r // empty match at the end of the subject
+		}
+		retryFlags = NOTEMPTY_ATSTART | ANCHORED
 	}
 
 	return append(r, bytes...)
@@ -493,9 +516,30 @@ func (re Regexp) ReplaceAllString(subj, repl string, flags int) string {
 	m.init(re)
 	r := ""
 
-	for m.MatchStringWFlags(subj, flags) {
+	// Same global-match loop as ReplaceAll; see the comment there.
+	retryFlags := 0
+	for {
+		if !m.MatchStringWFlags(subj, flags|retryFlags) {
+			if retryFlags == 0 || len(subj) == 0 {
+				break
+			}
+			r += subj[:1]
+			subj = subj[1:]
+			retryFlags = 0
+			continue
+		}
+
 		r += subj[:m.oVector[0]] + repl
+		empty := m.oVector[0] == m.oVector[1]
 		subj = subj[m.oVector[1]:]
+		if !empty {
+			retryFlags = 0
+			continue
+		}
+		if len(subj) == 0 {
+			return r // empty match at the end of the subject
+		}
+		retryFlags = NOTEMPTY_ATSTART | ANCHORED
 	}
 
 	return r + subj

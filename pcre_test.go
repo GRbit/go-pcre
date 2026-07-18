@@ -586,6 +586,47 @@ func TestExtractStringUnsetGroup(t *testing.T) {
 	}
 }
 
+func TestReplaceAllEmptyMatch(t *testing.T) {
+	// A pattern that can match the empty string must not make ReplaceAll
+	// loop forever. Expected results follow Perl s///g semantics (verified
+	// against perl; note Go's stdlib differs on `o*`: it yields "-f-"
+	// because RE2 drops an empty match adjacent to a previous match).
+	type tc struct{ pattern, subj, repl, want string }
+	tests := []tc{
+		{`x*`, "abc", "-", "-a-b-c-"},
+		{`o*`, "foo", "-", "-f--"},
+		{`o*?`, "foo", "-", "-f-----"},
+		{`x*`, "", "-", "-"},
+	}
+
+	done := make(chan struct{})
+	var got [2][]string
+	go func() {
+		defer close(done)
+		re := Regexp{}
+		for _, c := range tests {
+			re = MustCompile(c.pattern, 0)
+			got[0] = append(got[0], string(re.ReplaceAll([]byte(c.subj), []byte(c.repl), 0)))
+			got[1] = append(got[1], re.ReplaceAllString(c.subj, c.repl, 0))
+		}
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("ReplaceAll/ReplaceAllString hang on empty-matching pattern")
+	}
+
+	for i, c := range tests {
+		if got[0][i] != c.want {
+			t.Errorf("ReplaceAll(%q, %q, %q): got %q, want %q", c.pattern, c.subj, c.repl, got[0][i], c.want)
+		}
+		if got[1][i] != c.want {
+			t.Errorf("ReplaceAllString(%q, %q, %q): got %q, want %q", c.pattern, c.subj, c.repl, got[1][i], c.want)
+		}
+	}
+}
+
 func TestReplaceAll(t *testing.T) {
 	re := MustCompile("foo", 0)
 	// Don't change at ends.
