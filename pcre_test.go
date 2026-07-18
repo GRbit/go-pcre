@@ -544,6 +544,48 @@ func TestExtractStringAfterBytesMatch(t *testing.T) {
 	_ = m.ExtractString()
 }
 
+func TestExtractUnsetGroup(t *testing.T) {
+	// Group 1 does not participate in the match; its oVector entries are
+	// -1/-1. Extract must return nil for it (as documented), not panic.
+	re := MustCompile(`(X)*ab(c)`, 0)
+	m := re.NewMatcher([]byte("abc"), 0)
+	if !m.Matches {
+		t.Fatal("should match")
+	}
+
+	ex := m.Extract()
+	switch {
+	case len(ex) != 3:
+		t.Fatal("Extract length", len(ex))
+	case string(ex[0]) != "abc":
+		t.Error("full match:", ex[0])
+	case ex[1] != nil:
+		t.Error("unset group should be nil:", ex[1])
+	case string(ex[2]) != "c":
+		t.Error("group 2:", ex[2])
+	}
+}
+
+func TestExtractStringUnsetGroup(t *testing.T) {
+	re := MustCompile(`(X)*ab(c)`, 0)
+	m := re.NewMatcherString("abc", 0)
+	if !m.Matches {
+		t.Fatal("should match")
+	}
+
+	ex := m.ExtractString()
+	switch {
+	case len(ex) != 3:
+		t.Fatal("ExtractString length", len(ex))
+	case ex[0] != "abc":
+		t.Error("full match:", ex[0])
+	case ex[1] != "":
+		t.Error("unset group should be empty:", ex[1])
+	case ex[2] != "c":
+		t.Error("group 2:", ex[2])
+	}
+}
+
 func TestReplaceAll(t *testing.T) {
 	re := MustCompile("foo", 0)
 	// Don't change at ends.

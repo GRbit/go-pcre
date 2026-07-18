@@ -617,8 +617,9 @@ func (m *Matcher) Extract() [][]byte {
 	for i := 1; i < m.Groups+1; i++ {
 		start := m.oVector[2*i]
 		end := m.oVector[2*i+1]
-		capturedText := m.SubjectB[start:end]
-		capturedTexts[i] = capturedText
+		if start >= 0 {
+			capturedTexts[i] = m.SubjectB[start:end]
+		} // else: group did not participate in the match, leave nil
 	}
 
 	return capturedTexts
@@ -645,8 +646,9 @@ func (m *Matcher) ExtractString() []string {
 	for i := 1; i < m.Groups+1; i++ {
 		start := m.oVector[2*i]
 		end := m.oVector[2*i+1]
-
-		capturedTexts[i] = m.SubjectS[start:end]
+		if start >= 0 {
+			capturedTexts[i] = m.SubjectS[start:end]
+		} // else: group did not participate in the match, leave empty
 	}
 
 	return capturedTexts
