@@ -250,6 +250,37 @@ func TestStudiedRegexpUsableAfterGC(t *testing.T) {
 	}
 }
 
+func TestParseFlags(t *testing.T) {
+	cases := []struct {
+		in          string
+		wantPattern string
+		wantFlags   int
+	}{
+		{"abc", "abc", 0},
+		{"(?i)abc", "abc", CASELESS},
+		{"(?im)abc", "abc", CASELESS | MULTILINE},
+		{"(?i)(?m)abc", "abc", CASELESS | MULTILINE},
+		{"(?u)abc", "abc", UTF8 | UCP},
+		{"(?sUxXDJ)abc", "abc", DOTALL | UNGREEDY | EXTENDED | EXTRA | DOLLAR_ENDONLY | DUPNAMES},
+		{"(?:x)abc", "(?:x)abc", 0}, // non-capturing group, not flags
+		// Historic behavior, locked in for backward compatibility: any
+		// leading "(?letters)" group is consumed and unknown letters are
+		// silently ignored — even when the group is really a PCRE construct
+		// like (?R). See the ParseFlags doc comment and docs/BUGS.md #8.
+		{"(?R)abc", "abc", 0},
+		{"(?gi)abc", "abc", CASELESS},
+		{"(?i)(?R)abc", "abc", CASELESS},
+	}
+
+	for _, c := range cases {
+		gotPattern, gotFlags := ParseFlags(c.in)
+		if gotPattern != c.wantPattern || gotFlags != c.wantFlags {
+			t.Errorf("ParseFlags(%q): got (%q, %#x), want (%q, %#x)",
+				c.in, gotPattern, gotFlags, c.wantPattern, c.wantFlags)
+		}
+	}
+}
+
 func TestMatcherPicksUpStudyData(t *testing.T) {
 	// Matcher.init has a fast path that skips re-initialization when handed
 	// the same compiled pattern. It must not skip when the Regexp has been

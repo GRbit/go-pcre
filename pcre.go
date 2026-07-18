@@ -69,7 +69,6 @@ import (
 	"fmt"
 	"runtime"
 	"strconv"
-	"strings"
 	"sync/atomic"
 	"unsafe"
 )
@@ -196,47 +195,47 @@ func pcreCaptureNames(ptr *C.pcre) []CaptureName {
 	return result
 }
 
+// parseFlagsRe matches a leading "(?letters)" candidate flag group.
+var parseFlagsRe = MustCompile(`^\(\?[a-zA-Z]+?\)`, 0)
+
+// flagLetters maps "(?flags)" letters to the compile flags they stand for.
+var flagLetters = map[byte]int{
+	'i': CASELESS,
+	'D': DOLLAR_ENDONLY,
+	's': DOTALL,
+	'J': DUPNAMES,
+	'x': EXTENDED,
+	'X': EXTRA,
+	'm': MULTILINE,
+	'U': UNGREEDY,
+	'u': UTF8 | UCP,
+}
+
 // ParseFlags returns string with regex pattern and int with pcre flags.
 // Flags are specified before the regex in form like this "(?flags)regex"
 // Supported symbols i=CASELESS; m=MULTILINE; s=DOTALL; U=UNGREEDY; J=DUPNAMES;
 // x=EXTENDED; X=EXTRA; D=DOLLAR_ENDONLY; u=UTF8|UCP;
+//
+// Caveat (kept for backward compatibility): every leading "(?letters)" group
+// is consumed, and letters that are not flags are silently ignored. This
+// means PCRE constructs made of letters only, such as "(?R)", are stripped
+// from the beginning of the pattern rather than passed to pcre_compile. Do
+// not use ParseFlags/CompileParse with such patterns.
 func ParseFlags(ptr string) (string, int) {
-	fReg := MustCompile("^\\(\\?[a-zA-Z]+?\\)", 0)
 	flags := 0
 
-	for fStr := fReg.FindString(ptr, 0); fStr != ""; ptr = ptr[len(fStr):] {
-		fStr = fReg.FindString(ptr, 0)
+	for {
+		fStr := parseFlagsRe.FindString(ptr, 0)
+		if fStr == "" {
+			return ptr, flags
+		}
 
-		if strings.Contains(fStr, "i") {
-			flags |= CASELESS
+		for i := 2; i < len(fStr)-1; i++ { // letters between "(?" and ")"
+			flags |= flagLetters[fStr[i]] // unknown letters add nothing
 		}
-		if strings.Contains(fStr, "D") {
-			flags |= DOLLAR_ENDONLY
-		}
-		if strings.Contains(fStr, "s") {
-			flags |= DOTALL
-		}
-		if strings.Contains(fStr, "J") {
-			flags |= DUPNAMES
-		}
-		if strings.Contains(fStr, "x") {
-			flags |= EXTENDED
-		}
-		if strings.Contains(fStr, "X") {
-			flags |= EXTRA
-		}
-		if strings.Contains(fStr, "m") {
-			flags |= MULTILINE
-		}
-		if strings.Contains(fStr, "U") {
-			flags |= UNGREEDY
-		}
-		if strings.Contains(fStr, "u") {
-			flags |= UTF8 | UCP
-		}
+
+		ptr = ptr[len(fStr):]
 	}
-
-	return ptr, flags
 }
 
 // extraHandle owns the pcre_extra block returned by pcre_study. The block
