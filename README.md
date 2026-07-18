@@ -64,12 +64,17 @@ cd pcre-8.45
     --prefix=/usr/local \
     --enable-utf \
     --enable-unicode-properties \
+    --enable-jit \
     --enable-shared
 
 make -j"$(nproc)"
 sudo make install
 sudo ldconfig
 ```
+
+Note: `--enable-jit` is essential and off by default — without it libpcre
+silently runs without JIT (`Config(CONFIG_JIT)` returns "0") and the main
+performance advantage of this library is lost.
 
 ### If `pkg-config` cannot find `libpcre`
 
