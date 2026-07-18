@@ -4,12 +4,44 @@ package pcre
 
 import (
 	"runtime"
+	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 	"unsafe"
 )
+
+func TestConfigMatchLimitBufferWidth(t *testing.T) {
+	// For these two queries pcre_config writes an unsigned long — 8 bytes
+	// on LP64 (pcre_config.c: *((unsigned long int *)where) = MATCH_LIMIT)
+	// — unlike the plain int it writes for the other numeric queries.
+	// Prove the write width with a poisoned 64-bit buffer, then require
+	// Config to return the full correctly-read value. Passing a 4-byte
+	// buffer, as Config once did, overflows it.
+	for _, f := range []int{CONFIG_MATCH_LIMIT, CONFIG_MATCH_LIMIT_RECURSION} {
+		v := uint64(0xFFFFFFFF00000000)
+		pcreConfig(f, unsafe.Pointer(&v))
+
+		if v>>32 == 0xFFFFFFFF {
+			// The high half survived: this platform writes 4 bytes and an
+			// int-sized buffer is fine here. Nothing further to check.
+			t.Logf("flag %d: 4-byte write on this platform", f)
+			continue
+		}
+
+		// High half overwritten: 8-byte write confirmed, so Config must
+		// read through a 64-bit buffer to be correct (and to not smash
+		// whatever lives next to a smaller one).
+		want := strconv.FormatUint(v, 10)
+		if got := Config(f); got != want {
+			t.Errorf("Config(%d) = %q, want %q", f, got, want)
+		}
+		if all := ConfigAll(); !strings.Contains(all, want) {
+			t.Errorf("ConfigAll() does not contain the correct value %q", want)
+		}
+	}
+}
 
 func TestCompile(t *testing.T) {
 	check := func(p string, groups int) {

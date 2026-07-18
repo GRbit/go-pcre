@@ -82,6 +82,11 @@ var studyDataOffset = unsafe.Offsetof(C.struct_pcre_extra{}.study_data)
 // that finalizers actually release study data.
 var studiesFreed uint64
 
+// pcreConfig exposes raw pcre_config to tests (test files cannot use cgo).
+func pcreConfig(f int, where unsafe.Pointer) {
+	C.pcre_config(C.int(f), where)
+}
+
 // Config function returns information about libpcre configuration.
 // Function pass flag f to C.pcre_config() func, and convert returned
 // value to string type.
@@ -92,6 +97,16 @@ func Config(f int) string {
 		C.pcre_config(C.PCRE_CONFIG_JITTARGET, unsafe.Pointer(&jitTarget))
 
 		return C.GoString(jitTarget)
+	}
+
+	// pcre_config writes an unsigned long for these two queries (8 bytes on
+	// LP64), unlike the plain int of every other numeric query; a C.int
+	// buffer would be overflowed.
+	if f == C.PCRE_CONFIG_MATCH_LIMIT || f == C.PCRE_CONFIG_MATCH_LIMIT_RECURSION {
+		var l C.ulong
+		C.pcre_config(C.int(f), unsafe.Pointer(&l))
+
+		return strconv.FormatUint(uint64(l), 10)
 	}
 
 	var i C.int
@@ -114,10 +129,13 @@ func ConfigAll() string {
 	ret += fmt.Sprintf("jittarget: %s\n", C.GoString(jitTarget))
 	C.pcre_config(C.PCRE_CONFIG_LINK_SIZE, unsafe.Pointer(&i))
 	ret += fmt.Sprintf("link_size: %d\n", int32(i))
-	C.pcre_config(C.PCRE_CONFIG_MATCH_LIMIT, unsafe.Pointer(&i))
-	ret += fmt.Sprintf("match_limit: %d\n", int32(i))
-	C.pcre_config(C.PCRE_CONFIG_MATCH_LIMIT_RECURSION, unsafe.Pointer(&i))
-	ret += fmt.Sprintf("match_limit_recursion: %d\n", int32(i))
+
+	// These two queries are written as unsigned long, not int; see Config.
+	var l C.ulong
+	C.pcre_config(C.PCRE_CONFIG_MATCH_LIMIT, unsafe.Pointer(&l))
+	ret += fmt.Sprintf("match_limit: %d\n", uint64(l))
+	C.pcre_config(C.PCRE_CONFIG_MATCH_LIMIT_RECURSION, unsafe.Pointer(&l))
+	ret += fmt.Sprintf("match_limit_recursion: %d\n", uint64(l))
 	C.pcre_config(C.PCRE_CONFIG_NEWLINE, unsafe.Pointer(&i))
 	ret += fmt.Sprintf("newline: %d\n", int32(i))
 	C.pcre_config(C.PCRE_CONFIG_BSR, unsafe.Pointer(&i))
