@@ -5,6 +5,7 @@ package pcre
 import (
 	"testing"
 	"time"
+	"unsafe"
 )
 
 func TestCompile(t *testing.T) {
@@ -178,6 +179,38 @@ func TestStudyNullReturn(t *testing.T) {
 
 			t.Logf("extra len=%d (0 means pcre_study returned NULL, which is the bug trigger)", len(re.extra))
 		})
+	}
+}
+
+func TestStudyDataStaysValid(t *testing.T) {
+	// pcre_study returns one allocation: [pcre_extra | pcre_study_data],
+	// with extra->study_data pointing at the second part. Study() must not
+	// leave that pointer targeting the C block it frees.
+	re := MustCompile(`(Bel[ao]rus)|(Бел[ао]рус)`, UTF8|CASELESS)
+	if err := re.Study(0); err != nil {
+		t.Fatal(err)
+	}
+	if re.extra == nil {
+		// This pattern is known to produce study data (TestCompileAndStudy
+		// asserts the same); if it stops doing so, the test no longer guards
+		// the bug and must be updated with a pattern that does.
+		t.Fatal("pcre_study produced no data for this pattern; pick a pattern that has study data")
+	}
+
+	if len(re.extra) <= sizeofPcreExtra {
+		t.Fatalf("re.extra holds only the pcre_extra struct (%d bytes); study data was not copied", len(re.extra))
+	}
+
+	start := uintptr(unsafe.Pointer(&re.extra[0]))
+	end := start + uintptr(len(re.extra))
+	studyData := *(*uintptr)(unsafe.Pointer(&re.extra[studyDataOffset]))
+	if studyData < start || studyData >= end {
+		t.Errorf("extra.study_data (%#x) points outside re.extra [%#x,%#x): dangling pointer to freed C memory",
+			studyData, start, end)
+	}
+
+	if !re.NewMatcherString("Беларусь", 0).Matches {
+		t.Error("studied regexp failed to match")
 	}
 }
 

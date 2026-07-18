@@ -72,6 +72,11 @@ import (
 	"unsafe"
 )
 
+// Layout of the pcre_extra struct, shared with tests (test files cannot use cgo).
+const sizeofPcreExtra = C.sizeof_struct_pcre_extra
+
+var studyDataOffset = unsafe.Offsetof(C.struct_pcre_extra{}.study_data)
+
 // Config function returns information about libpcre configuration.
 // Function pass flag f to C.pcre_config() func, and convert returned
 // value to string type.
@@ -496,11 +501,35 @@ func (re *Regexp) Study(flags int) error {
 
 	defer C.free(unsafe.Pointer(extra))
 
-	var _extra C.struct_pcre_extra
-	size := unsafe.Sizeof(_extra) // Fixed size
-	re.extra = C.GoBytes(unsafe.Pointer(extra), C.int(size))
+	// pcre_study returns a single allocation holding the pcre_extra struct
+	// immediately followed by its pcre_study_data (whose first uint32 field
+	// is its total size), with extra->study_data pointing at the latter.
+	// Copy the whole block and re-point study_data into the copy; otherwise
+	// it would keep referencing the C block freed above.
+	size := C.int(sizeofPcreExtra)
+	if extra.flags&C.PCRE_EXTRA_STUDY_DATA != 0 && extra.study_data != nil {
+		size += C.int(*(*uint32)(extra.study_data))
+	}
+
+	re.extra = C.GoBytes(unsafe.Pointer(extra), size)
+	re.patchStudyData()
 
 	return nil
+}
+
+// patchStudyData points the study_data field of the pcre_extra copy held in
+// re.extra at the study data stored later in the same slice. Called after the
+// copy is created and again before every pcre_exec, so the pointer is correct
+// even if the slice bytes were duplicated since the last patch.
+func (re *Regexp) patchStudyData() {
+	if len(re.extra) <= sizeofPcreExtra {
+		return
+	}
+
+	extra := (*C.struct_pcre_extra)(unsafe.Pointer(&re.extra[0]))
+	if extra.flags&C.PCRE_EXTRA_STUDY_DATA != 0 {
+		extra.study_data = unsafe.Pointer(&re.extra[sizeofPcreExtra])
+	}
 }
 
 // Matcher objects provide a place for storing match results.
@@ -559,6 +588,7 @@ func (m *Matcher) ExecString(subject string, flags int) int {
 func (m *Matcher) exec(subjectP *C.char, length, flags int) int {
 	var extra *C.pcre_extra
 	if m.re.extra != nil {
+		m.re.patchStudyData()
 		extra = (*C.pcre_extra)(unsafe.Pointer(&m.re.extra[0]))
 	}
 
