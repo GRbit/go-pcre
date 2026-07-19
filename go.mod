@@ -1,3 +1,3 @@
-module github.com/GRbit/go-pcre
+module github.com/GRbit/go-pcre/v2
 
-go 1.17
+go 1.24

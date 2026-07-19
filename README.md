@@ -1,129 +1,49 @@
-# go-pcre
+# go-pcre/v2
 
-[![Go Reference](https://pkg.go.dev/badge/github.com/GRbit/go-pcre.svg)](https://pkg.go.dev/github.com/GRbit/go-pcre)
-[![Go Version](https://img.shields.io/github/go-mod/go-version/GRbit/go-pcre)](https://github.com/GRbit/go-pcre)
 [![License](https://img.shields.io/github/license/GRbit/go-pcre)](LICENSE)
 
-This package provides Perl-Compatible RegularExpression
-support in Go using `libpcre` or `libpcre++`.
+Perl-Compatible Regular Expressions for Go via **PCRE2** (10.x), with JIT
+compilation. This is v2 of [github.com/GRbit/go-pcre](https://github.com/GRbit/go-pcre),
+porting the same `Regexp`/`Matcher` API from the legacy PCRE 8.x library to
+PCRE2. v1 users migrate by changing the import path; the small list of
+intentional behavior differences will be documented in the migration guide
+(placeholder below).
 
-The origin of this package is [glenn-brown pcre](https://github.com/glenn-brown/golang-pkg-pcre)
-but across other forks, this one has JIT compilation available, which makes it much faster.
-You can check out [benchmarks game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/performance/regexredux.html)
-to see the difference.
-
-| Go library | Time (lower is better) |
-| ---------- | ---------------------- |
-| This one | 3.85 seconds |
-| [mdellandrea](https://github.com/mdellandrea/golang-pkg-pcre) (also glenn-brown fork)  | 14.48 seconds |
-| standard one |  27.87 seconds |
-
-As you can see, this library is almost an order
-of magnitude faster than standard one and
-3-4 times faster than pcre without JIT compilation.
-
-## Interface / API
-
-API this library provides is a plain copy of C library API.
-Which may look really ugly to Go programmers.
-At least, it looks ugly to me, I don't think it's very
-convenient to set binary flags to use your regexp.
-
-I want to refactor this library and make v2 version which will
-have API more like a standard library. If you are interested
-in such library, hit the star button. The more stars I see,
-the closer I am to implementing this idea.
-
-## Documentation
-
-Use [pkg.go.dev](https://pkg.go.dev/github.com/GRbit/go-pcre).
+**Status: under development.** The port is being built phase by phase; the
+v1 test suite is its conformance oracle.
 
 ## Installation
 
-1. install `libpcre3-dev` or `libpcre++-dev`
-
-2. go get
-
-```bash
-sudo apt-get install libpcre3-dev
-go get github.com/GRbit/go-pcre
-```
-
-## Building on newer Linux distributions
-
-Recent Linux distributions no longer ship the legacy **PCRE 8.x** development package (`libpcre3-dev`). This project depends on the original PCRE library rather than PCRE2, so the library must be built manually.
+PCRE2 ships as a standard package on every current distribution - no more
+building PCRE by hand:
 
 ```bash
-wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz/download \
-    -O pcre-8.45.tar.gz
-
-tar xf pcre-8.45.tar.gz
-cd pcre-8.45
-
-./configure \
-    --prefix=/usr/local \
-    --enable-utf \
-    --enable-unicode-properties \
-    --enable-jit \
-    --enable-shared
-
-make -j"$(nproc)"
-sudo make install
-sudo ldconfig
+sudo apt-get install libpcre2-dev   # Debian/Ubuntu
+go get github.com/GRbit/go-pcre/v2
 ```
 
-Note: `--enable-jit` is essential and off by default — without it libpcre
-silently runs without JIT (`Config(CONFIG_JIT)` returns "0") and the main
-performance advantage of this library is lost.
-
-### If `pkg-config` cannot find `libpcre`
-
-```bash
-export PKG_CONFIG_PATH=/usr/local/lib/pkgconfig:$PKG_CONFIG_PATH
-```
+Requires `libpcre2-8` >= 10.34 (Debian 11 / Ubuntu 20.04 era or newer). The
+package fails at build time on older versions rather than degrading
+silently. JIT is enabled in distribution packages by default; verify at
+runtime with the JIT detection API (Phase 3).
 
 ## Usage
 
-Go programs that depend on this package should import this package as
-follows to allow automatic downloading:
-
 ```go
-import (
-  "github.com/GRbit/go-pcre"
-)
+import "github.com/GRbit/go-pcre/v2"
 ```
 
-## Building your software
+## Migrating from v1
 
-Since this package use `cgo` it will build dynamically linked.
-If you plan to use this everywhere without `libpcre` dependency,
-you should build it statically linked. You can build your software
-with the following options:
-```bash
-go build -ldflags="-extldflags=-static"
-```
-More details on this [here](https://www.arp242.net/static-go.html)
-
-## Performance
-
-Brief performance comparison across other Go libraries is in the beginning
-of the README, but if you are curious what regex library is the fastest here is
-an exhaustive research of the question:
-https://zherczeg.github.io/sljit/regex_perf.html
-
-The answer is: it depends. But in most cases, it's RE2 or PCRE-JIT.
-RE2 tends to utilize multi-core systems better,
-while PCRE-JIT is better at using one CPU core for almost all use cases.
+Placeholder - the migration guide lands in Phase 6. Headline divergences
+already decided: embedded NUL bytes in patterns are legal; match errors are
+returned, never panicked; iteration is boundary-correct for `^`/`\b`/
+lookbehind and UTF-aware on empty-match advance; `NEWLINE_*`/`BSR_*` flag
+constants are absent (use in-pattern `(*CRLF)` etc.); explicit
+`Free()`/`Close()` is available with GC cleanup as backstop.
 
 ## LICENSE
 
-This is a fork of [hobeone pcre](https://github.com/hobeone/go-pcre),
-which is fork of [mathpl pcre](https://github.com/mathpl/golang-pkg-pcre),
-which is a fork of [glenn-brown pcre](https://github.com/glenn-brown/golang-pkg-pcre).
-The original package hasn't been updated for several years.
-But it is still being used in some software, despite its lack
-of JIT compiling, which gives huge speed-up to regexps.
-If you somehow can send a message to the original project owner,
-please inform him about this situation. Maybe he would like to
-transfer control over the repository to a maintainer who will
-have time to review pull requests.
+Same BSD-style license as v1 (see LICENSE). v1 descends from
+[glenn-brown/golang-pkg-pcre](https://github.com/glenn-brown/golang-pkg-pcre);
+v2 is a fresh PCRE2 binding that keeps the v1 API surface.
