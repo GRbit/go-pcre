@@ -14,30 +14,37 @@ const cyrBelarusMixed = "\xd0\xb1\xd0\x95\xd0\x9b\xd0\x90\xd0\xa0\xd0\xa3\xd0\xa
 func TestParseFlags(t *testing.T) {
 	// ParseFlags keeps v1's lenient semantics: every leading "(?letters)"
 	// group is consumed and unknown letters are silently ignored, even
-	// when the group is really a PCRE construct like (?R). X (v1 EXTRA)
-	// maps to no flag bits: PCRE2 is strict by default (MIGRATION.md D8).
+	// when the group is really a PCRE construct like (?R). ParseFlagsStrict
+	// leaves a group containing any unknown letter to the engine and stops
+	// there. X (v1 EXTRA) maps to no flag bits: PCRE2 is strict by default
+	// (MIGRATION.md D8).
 	const all = DOTALL | UNGREEDY | EXTENDED | EXTRA | DOLLAR_ENDONLY | DUPNAMES
 	cases := []struct {
-		in          string
-		wantPattern string
-		wantFlags   int
+		in           string
+		lenient      string
+		lenientFlags int
+		strict       string
+		strictFlags  int
 	}{
-		{"abc", "abc", 0},
-		{"(?i)abc", "abc", CASELESS},
-		{"(?im)abc", "abc", CASELESS | MULTILINE},
-		{"(?i)(?m)abc", "abc", CASELESS | MULTILINE},
-		{"(?u)abc", "abc", UTF8 | UCP},
-		{"(?sUxXDJ)abc", "abc", all},
-		{"(?:x)abc", "(?:x)abc", 0}, // non-capturing group, not flags
-		{"(?R)abc", "abc", 0},
-		{"(?gi)abc", "abc", CASELESS},
-		{"(?i)(?R)abc", "abc", CASELESS},
-		{"(?R)(?i)abc", "abc", CASELESS},
+		{"abc", "abc", 0, "abc", 0},
+		{"(?i)abc", "abc", CASELESS, "abc", CASELESS},
+		{"(?im)abc", "abc", CASELESS | MULTILINE, "abc", CASELESS | MULTILINE},
+		{"(?i)(?m)abc", "abc", CASELESS | MULTILINE, "abc", CASELESS | MULTILINE},
+		{"(?u)abc", "abc", UTF8 | UCP, "abc", UTF8 | UCP},
+		{"(?sUxXDJ)abc", "abc", all, "abc", all},
+		{"(?:x)abc", "(?:x)abc", 0, "(?:x)abc", 0}, // non-capturing group, not flags
+		{"(?R)abc", "abc", 0, "(?R)abc", 0},
+		{"(?gi)abc", "abc", CASELESS, "(?gi)abc", 0},
+		{"(?i)(?R)abc", "abc", CASELESS, "(?R)abc", CASELESS},
+		{"(?R)(?i)abc", "abc", CASELESS, "(?R)(?i)abc", 0},
 	}
 
 	for _, c := range cases {
-		if p, f := ParseFlags(c.in); p != c.wantPattern || f != c.wantFlags {
-			t.Errorf("ParseFlags(%q) = (%q, %#x), want (%q, %#x)", c.in, p, f, c.wantPattern, c.wantFlags)
+		if p, f := ParseFlags(c.in); p != c.lenient || f != c.lenientFlags {
+			t.Errorf("ParseFlags(%q) = (%q, %#x), want (%q, %#x)", c.in, p, f, c.lenient, c.lenientFlags)
+		}
+		if p, f := ParseFlagsStrict(c.in); p != c.strict || f != c.strictFlags {
+			t.Errorf("ParseFlagsStrict(%q) = (%q, %#x), want (%q, %#x)", c.in, p, f, c.strict, c.strictFlags)
 		}
 	}
 }
@@ -90,5 +97,29 @@ func TestCompileParse(t *testing.T) {
 			}()
 			must()
 		}()
+	}
+}
+
+func TestCompileParseStrict(t *testing.T) {
+	re, err := CompileParseStrict("(?i)abc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !re.MatchStringWFlags("xABCy", 0) {
+		t.Error("(?i)abc should match xABCy caselessly")
+	}
+
+	// Perl-faithful failure: (?gi) reaches the engine and is rejected
+	// there with a real *CompileError (historic CompileParse silently
+	// turned it into CASELESS).
+	_, err = CompileParseStrict("(?gi)abc")
+	var cErr *CompileError
+	if !errors.As(err, &cErr) {
+		t.Errorf("CompileParseStrict((?gi)abc): err = %v, want *CompileError", err)
+	}
+
+	// (?R) survives as recursion syntax and compiles.
+	if _, err = CompileParseStrict(`a(?R)?b`); err != nil {
+		t.Errorf("a(?R)?b should compile as recursion: %v", err)
 	}
 }

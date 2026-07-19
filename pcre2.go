@@ -146,6 +146,15 @@ type Regexp struct {
 // non-nil, and is a *CompileError carrying PCRE2's message and the byte
 // offset of the problem inside the pattern.
 //
+// Flags can also be written inside the pattern itself: PCRE2 natively
+// parses Perl's inline modifiers - "(?i)", "(?m)", "(?s)", "(?x)"/"(?xx)",
+// "(?n)", "(?U)", "(?J)", negation "(?i-m)", reset "(?^i)", scoped groups
+// "(?i:...)" - plus the start-of-pattern verbs "(*UTF)" and "(*UCP)" that
+// replace the UTF/UCP flags. Modifiers are handled with Perl's placement
+// rules and Perl's errors for unknown letters, so plain Compile with
+// inline modifiers is the most Perl-compatible way to set flags; the
+// ParseFlags family exists for v1 compatibility and convenience.
+//
 // Unlike v1, patterns may contain NUL bytes: PCRE2 receives the pattern
 // with an explicit length (intentional v2 divergence).
 func Compile(pattern string, flags int) (Regexp, error) {
