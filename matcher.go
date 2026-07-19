@@ -9,6 +9,7 @@ package pcre
 import "C"
 
 import (
+	"errors"
 	"fmt"
 	"runtime"
 	"sync"
@@ -384,6 +385,11 @@ func (m *Matcher) ExtractString() []string {
 	return captured
 }
 
+// ErrNonUniqueName is wrapped by Named* errors when the pattern was
+// compiled with DUPNAMES and the queried name refers to several groups.
+// Use Regexp.GroupNumbersForName to enumerate them.
+var ErrNonUniqueName = errors.New("name refers to multiple groups (DUPNAMES)")
+
 // name2index resolves a capture group name to its number via
 // pcre2_substring_number_from_name.
 func (m *Matcher) name2index(name string) (int, error) {
@@ -397,7 +403,10 @@ func (m *Matcher) name2index(name string) (int, error) {
 	group := int(C.pcre2_substring_number_from_name(
 		m.re.code.ptr(), (*C.PCRE2_UCHAR)(unsafe.Pointer(nameC))))
 	runtime.KeepAlive(m.re.code)
-	if group < 0 {
+	switch {
+	case group == ERROR_NOUNIQUESUBSTRING:
+		return 0, fmt.Errorf("pcre: Matcher.Named: %q: %w", name, ErrNonUniqueName)
+	case group < 0:
 		return 0, fmt.Errorf("pcre: Matcher.Named: unknown name: %s", name)
 	}
 
