@@ -326,7 +326,8 @@ func TestConcurrent(t *testing.T) {
 	// The documented contract (same as v1, and exactly PCRE2's own:
 	// pcre2api.3 MULTITHREADING): a fully constructed Regexp, JIT-compiled
 	// or not, may be shared by concurrently matching goroutines, each using
-	// its own Matcher. Run under -race, this test validates that promise.
+	// its own Matcher; the stateless helpers share pooled Matchers behind
+	// the scenes. Run under -race, this test validates that promise.
 	for _, jit := range []bool{false, true} {
 		re := MustCompile("(Bel[ao]rus)|("+cyrBelarusPattern+")", UTF|CASELESS)
 		if jit {
@@ -341,7 +342,12 @@ func TestConcurrent(t *testing.T) {
 				var m Matcher
 				for i := 0; i < 200; i++ {
 					m.ResetString(re, cyrBelarus+": MTS", 0)
-					if !m.Matches {
+					ok := m.Matches &&
+						re.FindString("say "+cyrBelarus, 0) != "" &&
+						re.MatchWFlags([]byte(cyrBelarus), 0) &&
+						len(re.FindAllIndex([]byte(cyrBelarus+" "+cyrBelarus), 0)) == 2 &&
+						re.ReplaceAllString(cyrBelarus, "x", 0) != cyrBelarus
+					if !ok {
 						t.Errorf("jit=%v: a concurrent match went wrong", jit)
 
 						return

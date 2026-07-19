@@ -87,6 +87,14 @@ const (
 	STUDY_JIT_PARTIAL_HARD_COMPILE = C.PCRE2_JIT_PARTIAL_HARD
 )
 
+// Substitute options, for the ReplaceAllTemplate family
+// (pcre2_substitute). GLOBAL, OVERFLOW_LENGTH and UNSET_EMPTY are always
+// set internally; the ones here can be added through the flags argument.
+const (
+	SUBSTITUTE_EXTENDED      = C.PCRE2_SUBSTITUTE_EXTENDED
+	SUBSTITUTE_UNKNOWN_UNSET = C.PCRE2_SUBSTITUTE_UNKNOWN_UNSET
+)
+
 // Error codes returned by match functions (negative) and name lookups.
 // Message texts for any code come from pcre2_get_error_message.
 const (

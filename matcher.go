@@ -83,15 +83,48 @@ type Matcher struct {
 	SubjectB []byte         // contain found subject as []byte
 }
 
+// matcherFromPool returns a Matcher bound to this pattern for the
+// stateless helper APIs, recycling match data via the codeHandle pool.
+// Callers must return it with putMatcher and must not retain it.
+func (re *Regexp) matcherFromPool() *Matcher {
+	if re.code == nil {
+		panic("pcre: use of uninitialized or freed Regexp")
+	}
+	if v := re.code.matchers.Get(); v != nil {
+		return v.(*Matcher) // pool entries are always bound to re.code
+	}
+
+	m := new(Matcher)
+	m.init(*re)
+
+	return m
+}
+
+// putMatcher parks a pooled Matcher, dropping subject references so the
+// pool does not pin caller memory and cannot leak stale results.
+func (re *Regexp) putMatcher(m *Matcher) {
+	m.Matches = false
+	m.Error = nil
+	m.SubjectB = nil
+	m.SubjectS = ""
+	re.code.matchers.Put(m)
+}
+
 // MatchWFlags tries to match the specified byte array slice to the
 // pattern. Returns true if the match succeeds.
 func (re *Regexp) MatchWFlags(subject []byte, flags int) bool {
-	return re.NewMatcher(subject, flags).Matches
+	m := re.matcherFromPool()
+	defer re.putMatcher(m)
+
+	return m.matchWithOffset(subject, 0, flags)
 }
 
 // MatchStringWFlags is the same as MatchWFlags, but accept string as argument.
 func (re *Regexp) MatchStringWFlags(subject string, flags int) bool {
-	return re.NewMatcherString(subject, flags).Matches
+	m := re.matcherFromPool()
+	defer re.putMatcher(m)
+
+	return m.matchWithOffset([]byte(subject), 0, flags)
 }
 
 // NewMatcher return a new matcher object, with the byte array slice as a
@@ -184,8 +217,10 @@ func (m *Matcher) ExecString(subject string, flags int) int {
 	return m.exec(m.SubjectB, 0, flags)
 }
 
-// exec runs pcre2_match over the whole subject from startOffset; the
-// ovector then holds absolute subject offsets.
+// exec runs pcre2_match over the whole subject from startOffset. The
+// ovector then holds absolute subject offsets, and the pattern sees the
+// true context before the offset (\b, lookbehind), which the Find/Replace
+// iteration relies on.
 func (m *Matcher) exec(subject []byte, startOffset, flags int) int {
 	if m.md == nil {
 		panic("pcre: use of uninitialized or freed Matcher")
@@ -217,6 +252,14 @@ func (m *Matcher) finish(rc int) bool {
 	}
 
 	return m.Matches
+}
+
+// matchWithOffset is the native-startoffset primitive behind the
+// Find/Replace iteration: a match at offset within the full subject.
+func (m *Matcher) matchWithOffset(subject []byte, offset, flags int) bool {
+	m.SubjectS, m.SubjectB = "", subject
+
+	return m.finish(m.exec(subject, offset, flags))
 }
 
 // MatchWFlags tries to match the specified byte array slice to the

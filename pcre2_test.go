@@ -162,12 +162,17 @@ func TestRegexpFree(t *testing.T) {
 
 func TestZeroValueRegexpPanics(t *testing.T) {
 	// v1 behavior kept: using a zero-value Regexp panics with a clear
-	// message rather than dereferencing nothing.
+	// message rather than dereferencing nothing. The stateless helpers go
+	// through the Matcher pool and must fail the same way, not with a
+	// nil-pointer dereference.
 	var re Regexp
 	for name, f := range map[string]func(){
 		"Groups":           func() { re.Groups() },
 		"NewMatcher":       func() { re.NewMatcher([]byte("a"), 0) },
 		"NewMatcherString": func() { re.NewMatcherString("a", 0) },
+		"MatchWFlags":      func() { re.MatchWFlags([]byte("a"), 0) },
+		"FindAllIndex":     func() { re.FindAllIndex([]byte("a"), 0) },
+		"ReplaceAll":       func() { re.ReplaceAll([]byte("a"), nil, 0) },
 	} {
 		func() {
 			defer func() {

@@ -52,6 +52,13 @@ type codeHandle struct {
 	p       *C.pcre2_code
 	cleanup runtime.Cleanup
 	free    sync.Once
+
+	// matchers recycles Matchers (and their C match_data blocks) for the
+	// stateless helper APIs (MatchWFlags, Find*, ReplaceAll), which would
+	// otherwise create and abandon one pcre2_match_data per call. Entries
+	// reference this handle back; the cycle is collected as a unit and the
+	// match-data cleanups still run then.
+	matchers sync.Pool
 }
 
 func newCodeHandle(p *C.pcre2_code) *codeHandle {
@@ -128,6 +135,11 @@ func cptr(b []byte) *C.PCRE2_UCHAR {
 // goroutines; see the package comment.
 type Regexp struct {
 	code *codeHandle
+
+	// Iteration facts queried once at compile time (pcre2_pattern_info):
+	// they steer the bump-along advance of the global-match protocol.
+	utf         bool // compiled with PCRE2_UTF: advance whole characters
+	crlfNewline bool // newline convention includes CRLF: skip it atomically
 }
 
 // Compile the pattern. If an error occurs, the second return value is
@@ -155,7 +167,16 @@ func Compile(pattern string, flags int) (Regexp, error) {
 		}
 	}
 
-	return Regexp{code: newCodeHandle(p)}, nil
+	var opts, nl C.uint32_t
+	C.pcre2_pattern_info(p, C.PCRE2_INFO_ALLOPTIONS, unsafe.Pointer(&opts))
+	C.pcre2_pattern_info(p, C.PCRE2_INFO_NEWLINE, unsafe.Pointer(&nl))
+
+	return Regexp{
+		code: newCodeHandle(p),
+		utf:  opts&C.PCRE2_UTF != 0,
+		crlfNewline: nl == C.PCRE2_NEWLINE_CRLF ||
+			nl == C.PCRE2_NEWLINE_ANY || nl == C.PCRE2_NEWLINE_ANYCRLF,
+	}, nil
 }
 
 // MustCompile is same as Compile but if compilation fails, panic.

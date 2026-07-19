@@ -1,6 +1,9 @@
 package pcre
 
-import "testing"
+import (
+	"strings"
+	"testing"
+)
 
 // The date-check pattern benchmarks are ported from v1 unchanged and are
 // the performance gate of the port: run them in both checkouts on the same
@@ -54,6 +57,47 @@ func BenchmarkExecWithoutStudy(b *testing.B) {
 		m.MatchWFlags(subj, 0)
 		if !m.Matches {
 			b.Error("The match should be matched")
+		}
+	}
+}
+
+func BenchmarkReplaceAll(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := []byte("food fight fools foo")
+	repl := []byte("car")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		re.ReplaceAll(subj, repl, 0)
+	}
+}
+
+func BenchmarkReplaceAllStringManyMatches(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := strings.Repeat("foo bar baz ", 1000)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		re.ReplaceAllString(subj, "car", 0)
+	}
+}
+
+func BenchmarkReplaceAllString(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := "food fight fools foo"
+	repl := "car"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		re.ReplaceAllString(subj, repl, 0)
+	}
+}
+
+func BenchmarkReplaceAllTemplate(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := []byte("food fight fools foo")
+	tmpl := []byte("car")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if _, err := re.ReplaceAllTemplate(subj, tmpl, 0); err != nil {
+			b.Fatal(err)
 		}
 	}
 }
