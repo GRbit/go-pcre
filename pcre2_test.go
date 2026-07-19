@@ -58,7 +58,7 @@ func TestCompileFail(t *testing.T) {
 func TestEmbeddedNULPattern(t *testing.T) {
 	// Intentional v2 divergence (D2): PCRE2 takes the pattern with an
 	// explicit length, so NUL bytes inside patterns are legal (v1 rejected
-	// them at compile time).
+	// them at compile time) and match literally.
 	for _, p := range []string{"abc\x00", "a\x00bc", "\x00", "(a\x00b)"} {
 		re, err := Compile(p, 0)
 		if err != nil {
@@ -68,6 +68,10 @@ func TestEmbeddedNULPattern(t *testing.T) {
 		}
 		if g, want := re.Groups(), strings.Count(p, "("); g != want {
 			t.Errorf("pattern %q: Groups() = %d, want %d", p, g, want)
+		}
+		with, without := "x"+p+"y", strings.ReplaceAll("x"+p+"y", "\x00", "")
+		if !re.MatchStringWFlags(with, 0) || re.MatchStringWFlags(without, 0) {
+			t.Errorf("pattern %q: must match %q and not %q", p, with, without)
 		}
 	}
 }
@@ -80,8 +84,8 @@ func TestCodeFreedOnGC(t *testing.T) {
 		before := codesFreed.Load()
 		for i := 0; i < 32; i++ {
 			re := MustCompile(`\d+foo`, 0)
-			if re.Groups() != 0 {
-				t.Fatal("unexpected group count")
+			if !re.MatchStringWFlags("123foo", 0) {
+				t.Fatal("should match")
 			}
 		}
 
@@ -97,18 +101,21 @@ func TestCodeFreedOnGC(t *testing.T) {
 }
 
 func TestRegexpUsableAfterGC(t *testing.T) {
-	// The reverse guarantee: as long as the Regexp is referenced, GC must
-	// NOT free the compiled code.
-	re := MustCompile(`(a)(b)`, 0)
-	runtime.GC()
-	runtime.GC()
+	// The reverse guarantee: as long as anything (here: a Matcher) still
+	// references the Regexp, GC must NOT free the compiled code.
+	for _, jit := range []bool{false} {
+		re := MustCompile("(Bel[ao]rus)|("+cyrBelarusPattern+")", UTF|CASELESS)
+		m := re.NewMatcherString(cyrBelarus, 0)
+		runtime.GC()
+		runtime.GC()
 
-	if g := re.Groups(); g != 2 {
-		t.Errorf("Groups() after GC = %d, want 2", g)
+		if !m.MatchStringWFlags(cyrBelarus, 0) {
+			t.Errorf("jit=%v: match after GC failed: compiled code was freed while still referenced", jit)
+		}
 	}
 }
 
-// settleCleanups runs a GC and waits until the free counter stops moving.
+// settleCleanups runs a GC and waits until the free counters stop moving.
 // Tests that measure a counter delta around an explicit Free call it
 // first: the GC tests before them leave cleanups queued for the objects
 // they abandoned, and a cleanup landing inside the measured window would
@@ -116,9 +123,9 @@ func TestRegexpUsableAfterGC(t *testing.T) {
 func settleCleanups() {
 	runtime.GC()
 	for i := 0; i < 100; i++ {
-		c := codesFreed.Load()
+		c, m := codesFreed.Load(), matchDatasFreed.Load()
 		time.Sleep(2 * time.Millisecond)
-		if codesFreed.Load() == c {
+		if codesFreed.Load() == c && matchDatasFreed.Load() == m {
 			return
 		}
 	}
@@ -150,7 +157,9 @@ func TestZeroValueRegexpPanics(t *testing.T) {
 	// message rather than dereferencing nothing.
 	var re Regexp
 	for name, f := range map[string]func(){
-		"Groups": func() { re.Groups() },
+		"Groups":           func() { re.Groups() },
+		"NewMatcher":       func() { re.NewMatcher([]byte("a"), 0) },
+		"NewMatcherString": func() { re.NewMatcherString("a", 0) },
 	} {
 		func() {
 			defer func() {
