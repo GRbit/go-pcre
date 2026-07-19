@@ -79,11 +79,15 @@ func TestEmbeddedNULPattern(t *testing.T) {
 func TestCodeFreedOnGC(t *testing.T) {
 	// Compiled patterns are C memory; they must be released via
 	// pcre2_code_free once the Regexp is garbage collected, otherwise every
-	// pattern leaks for the life of the process.
-	for _, jit := range []bool{false} {
+	// pattern leaks for the life of the process. JIT data is released by
+	// the same call, so the JIT variant is checked too.
+	for _, jit := range []bool{false, true} {
 		before := codesFreed.Load()
 		for i := 0; i < 32; i++ {
 			re := MustCompile(`\d+foo`, 0)
+			if jit {
+				re = MustCompileJIT(`\d+foo`, 0, JIT_COMPLETE)
+			}
 			if !re.MatchStringWFlags("123foo", 0) {
 				t.Fatal("should match")
 			}
@@ -102,9 +106,13 @@ func TestCodeFreedOnGC(t *testing.T) {
 
 func TestRegexpUsableAfterGC(t *testing.T) {
 	// The reverse guarantee: as long as anything (here: a Matcher) still
-	// references the Regexp, GC must NOT free the compiled code.
-	for _, jit := range []bool{false} {
+	// references the Regexp, GC must NOT free the compiled code or its JIT
+	// data.
+	for _, jit := range []bool{false, true} {
 		re := MustCompile("(Bel[ao]rus)|("+cyrBelarusPattern+")", UTF|CASELESS)
+		if jit {
+			re = MustCompileJIT("(Bel[ao]rus)|("+cyrBelarusPattern+")", UTF|CASELESS, JIT_COMPLETE)
+		}
 		m := re.NewMatcherString(cyrBelarus, 0)
 		runtime.GC()
 		runtime.GC()

@@ -39,15 +39,6 @@ import (
 	"unsafe"
 )
 
-// libJITSupported reports whether the linked libpcre2-8 was built with JIT
-// support. Phase 3 builds the public JITAvailable on top of it.
-func libJITSupported() bool {
-	var jit C.uint32_t
-	C.pcre2_config(C.PCRE2_CONFIG_JIT, unsafe.Pointer(&jit))
-
-	return jit != 0
-}
-
 // codesFreed counts pcre2_code_free calls; it exists for tests to observe
 // that cleanups actually release compiled patterns (v1's studiesFreed
 // pattern).

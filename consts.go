@@ -80,6 +80,11 @@ const (
 	// JAVASCRIPT_COMPAT maps to the two PCRE2 flags that reproduce it
 	// (docs/PORTING-TO-PCRE2.md).
 	JAVASCRIPT_COMPAT = C.PCRE2_ALT_BSUX | C.PCRE2_MATCH_UNSET_BACKREF
+	// STUDY_* are v1's names for the JIT compile modes; pcre_study itself
+	// has no PCRE2 equivalent (Study(0) is a no-op).
+	STUDY_JIT_COMPILE              = C.PCRE2_JIT_COMPLETE
+	STUDY_JIT_PARTIAL_SOFT_COMPILE = C.PCRE2_JIT_PARTIAL_SOFT
+	STUDY_JIT_PARTIAL_HARD_COMPILE = C.PCRE2_JIT_PARTIAL_HARD
 )
 
 // Error codes returned by match functions (negative) and name lookups.

@@ -324,10 +324,14 @@ func TestMatcherFree(t *testing.T) {
 
 func TestConcurrent(t *testing.T) {
 	// The documented contract (same as v1, and exactly PCRE2's own:
-	// pcre2api.3 MULTITHREADING): a fully constructed Regexp may be shared by concurrently matching goroutines, each using
+	// pcre2api.3 MULTITHREADING): a fully constructed Regexp, JIT-compiled
+	// or not, may be shared by concurrently matching goroutines, each using
 	// its own Matcher. Run under -race, this test validates that promise.
-	for _, jit := range []bool{false} {
+	for _, jit := range []bool{false, true} {
 		re := MustCompile("(Bel[ao]rus)|("+cyrBelarusPattern+")", UTF|CASELESS)
+		if jit {
+			re = MustCompileJIT("(Bel[ao]rus)|("+cyrBelarusPattern+")", UTF|CASELESS, JIT_COMPLETE)
+		}
 
 		var wg sync.WaitGroup
 		for g := 0; g < 8; g++ {
