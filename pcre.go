@@ -523,6 +523,14 @@ func (re Regexp) ReplaceAll(bytes, repl []byte, flags int) []byte {
 			continue
 		}
 
+		if m.oVector[1] < m.oVector[0] {
+			// \K in an assertion set the match start after its end, e.g.
+			// `(?=ab\K)`: the match consumed nothing, so continuing would
+			// loop forever. The reference loop (pcre2demo.c) abandons the
+			// run here; keep the rest of the subject unchanged.
+			break
+		}
+
 		r = append(append(r, bytes[:m.oVector[0]]...), repl...)
 		empty := m.oVector[0] == m.oVector[1]
 		bytes = bytes[m.oVector[1]:]

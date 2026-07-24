@@ -755,6 +755,35 @@ func TestReplaceAllEmptyMatch(t *testing.T) {
 	}
 }
 
+func TestReplaceAllKAssertionNoHang(t *testing.T) {
+	// \K inside a lookahead makes pcre_exec report a match whose start is
+	// AFTER its end: `(?=ab\K)` on "ab" yields ovector [2,0]. Such a match
+	// consumes no bytes, so ReplaceAll's loop made no progress and spun
+	// forever while growing the result. The reference global-match loop
+	// (PCRE2's pcre2demo.c) abandons the run when ovector[0] > ovector[1];
+	// ReplaceAll must do the same and return the remaining subject
+	// unchanged. (PCRE2 rejects \K in lookarounds at compile time, so v2
+	// cannot hit this state at all.)
+	re := MustCompile(`(?=ab\K)`, 0)
+
+	done := make(chan struct{})
+	var got []byte
+	go func() {
+		defer close(done)
+		got = re.ReplaceAll([]byte("ab"), []byte("<>"), 0)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("ReplaceAll hangs on \\K-in-lookahead pattern (match start after end)")
+	}
+
+	if string(got) != "ab" {
+		t.Errorf("ReplaceAll = %q, want %q (run abandoned, subject unchanged)", got, "ab")
+	}
+}
+
 func TestReplaceAll(t *testing.T) {
 	re := MustCompile("foo", 0)
 	// Don't change at ends.
