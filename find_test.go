@@ -20,11 +20,13 @@ func TestFind(t *testing.T) {
 }
 
 func TestFindAllIndex(t *testing.T) {
-	// The rows pin the global-match protocol (MIGRATION.md D4, D5):
+	// The rows pin the global-match protocol (MIGRATION.md D4, D5, D12):
 	// iteration drives a native start offset over the whole subject, so ^,
 	// \b/\B and lookbehind see the true context at every boundary (v1
-	// re-sliced the subject and got these wrong); the empty-match advance
-	// steps whole characters in UTF mode. A watchdog turns an infinite loop into a failure.
+	// re-sliced the subject and got these wrong); after an empty match the
+	// same offset is retried for a non-empty match before advancing,
+	// exactly like Perl's pos() loop; the advance steps whole characters
+	// in UTF mode. A watchdog turns an infinite loop into a failure.
 	cases := []struct {
 		pattern, subject string
 		flags            int
@@ -34,6 +36,10 @@ func TestFindAllIndex(t *testing.T) {
 		{"foo", "xyz", 0, nil},
 		// Empty matches at every position, once each (v1 looped forever).
 		{"", "abc", 0, [][]int{{0, 0}, {1, 1}, {2, 2}, {3, 3}}},
+		// D12: Perl s/|x/<>/g gives <><><>y<>; v1 skipped the "x" match.
+		{"|x", "xy", 0, [][]int{{0, 0}, {0, 1}, {1, 1}, {2, 2}}},
+		// D12: v1 reported the end-of-subject empty match twice.
+		{"$", "abc", 0, [][]int{{3, 3}}},
 		// D4: ^ anchors to the real subject start; v1 found it at every restart.
 		{`^.`, "abc", 0, [][]int{{0, 1}}},
 		// D4: \B sees the character before the offset (pcre2_match.3's own example).

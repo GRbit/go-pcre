@@ -23,6 +23,9 @@ kept, so existing code migrates by changing the import path.
    `ReplaceAll`, no `NEWLINE_*`/`BSR_*` flags, and so on) together with
    the regex dialect changes between PCRE 8.45 and PCRE2 10.x.
 
+The differences are enforced by the differential suite in `compat/`, which
+runs one corpus of patterns through v1 and v2 in a single binary.
+
 v1 stays on the [`pcre8.x`](https://github.com/GRbit/go-pcre/tree/pcre8.x)
 branch. [ARCHITECTURE.md](ARCHITECTURE.md) explains how the binding works.
 
