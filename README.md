@@ -7,6 +7,14 @@
 This package provides Perl-Compatible RegularExpression
 support in Go using `libpcre` or `libpcre++`.
 
+> **v2 is available.** [go-pcre/v2](https://pkg.go.dev/github.com/GRbit/go-pcre/v2)
+> (tag `v2.0.0`) keeps this `Regexp`/`Matcher` API but links modern **PCRE2**
+> (`libpcre2-dev`, packaged on every current distribution) instead of the
+> unmaintained PCRE 8.x this version uses. Migrate by changing the import
+> path to `github.com/GRbit/go-pcre/v2`; every behavior difference is
+> documented in
+> [MIGRATION.md](https://github.com/GRbit/go-pcre/blob/v2.0.0/MIGRATION.md).
+
 The origin of this package is [glenn-brown pcre](https://github.com/glenn-brown/golang-pkg-pcre)
 but across other forks, this one has JIT compilation available, which makes it much faster.
 You can check out [benchmarks game](https://benchmarksgame-team.pages.debian.net/benchmarksgame/performance/regexredux.html)
@@ -29,9 +37,12 @@ Which may look really ugly to Go programmers.
 At least, it looks ugly to me, I don't think it's very
 convenient to set binary flags to use your regexp.
 
-I want to refactor this library and make v2 version which will
-have API more like a standard library. If you are interested
-in such library, hit the star button. The more stars I see,
+The v2 major version ([go-pcre/v2](https://pkg.go.dev/github.com/GRbit/go-pcre/v2),
+tag `v2.0.0`) ports this same API to the PCRE2 library, so existing code migrates by changing the
+import path; all intentional behavior differences are listed in
+[MIGRATION.md](https://github.com/GRbit/go-pcre/blob/v2.0.0/MIGRATION.md).
+A more Go-idiomatic, standard-library-like API is still a future idea.
+If you are interested in it, hit the star button. The more stars I see,
 the closer I am to implementing this idea.
 
 ## Documentation
@@ -51,7 +62,7 @@ go get github.com/GRbit/go-pcre
 
 ## Building on newer Linux distributions
 
-Recent Linux distributions no longer ship the legacy **PCRE 8.x** development package (`libpcre3-dev`). This project depends on the original PCRE library rather than PCRE2, so the library must be built manually.
+Recent Linux distributions no longer ship the legacy **PCRE 8.x** development package (`libpcre3-dev`). This version depends on the original PCRE library rather than PCRE2, so the library must be built manually. (Alternatively, migrate to [v2](https://pkg.go.dev/github.com/GRbit/go-pcre/v2), which uses PCRE2 and needs only `libpcre2-dev` from your package manager; see its [MIGRATION.md](https://github.com/GRbit/go-pcre/blob/v2.0.0/MIGRATION.md).)
 
 ```bash
 wget https://sourceforge.net/projects/pcre/files/pcre/8.45/pcre-8.45.tar.gz/download \
