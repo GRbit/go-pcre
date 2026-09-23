@@ -123,8 +123,10 @@ type Regexp struct {
 	// cycle is collected as a unit and the match-data cleanups still run.
 	matchers *sync.Pool
 
-	// Iteration facts queried once at compile time (pcre2_pattern_info):
-	// they steer the bump-along advance of the global-match protocol.
+	// Facts queried once at compile time (pcre2_pattern_info). The bools
+	// steer the bump-along advance of the global-match protocol; groups
+	// sizes every Matcher bound to the pattern.
+	groups      int
 	utf         bool // compiled with PCRE2_UTF: advance whole characters
 	crlfNewline bool // newline convention includes CRLF: skip it atomically
 }
@@ -163,14 +165,13 @@ func Compile(pattern string, flags int) (Regexp, error) {
 		}
 	}
 
-	var opts, nl C.uint32_t
-	C.pcre2_pattern_info(p, C.PCRE2_INFO_ALLOPTIONS, unsafe.Pointer(&opts))
-	C.pcre2_pattern_info(p, C.PCRE2_INFO_NEWLINE, unsafe.Pointer(&nl))
+	nl := info32(p, C.PCRE2_INFO_NEWLINE)
 
 	return Regexp{
 		code:     newCodeHandle(p),
 		matchers: new(sync.Pool),
-		utf:      opts&C.PCRE2_UTF != 0,
+		groups:   int(info32(p, C.PCRE2_INFO_CAPTURECOUNT)),
+		utf:      info32(p, C.PCRE2_INFO_ALLOPTIONS)&C.PCRE2_UTF != 0,
 		crlfNewline: nl == C.PCRE2_NEWLINE_CRLF ||
 			nl == C.PCRE2_NEWLINE_ANY || nl == C.PCRE2_NEWLINE_ANYCRLF,
 	}, nil
@@ -188,12 +189,9 @@ func MustCompile(pattern string, flags int) (re Regexp) {
 
 // Groups returns the number of capture groups in the pattern.
 func (re Regexp) Groups() int {
-	return int(use(re.code, func(p *C.pcre2_code) C.uint32_t {
-		var count C.uint32_t
-		C.pcre2_pattern_info(p, C.PCRE2_INFO_CAPTURECOUNT, unsafe.Pointer(&count))
+	re.code.check() // a freed or zero Regexp panics here as everywhere
 
-		return count
-	}))
+	return re.groups
 }
 
 // Free releases the compiled pattern immediately instead of waiting for

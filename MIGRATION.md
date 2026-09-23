@@ -126,6 +126,9 @@ options in v2:
 - `JITAvailable()` and `Regexp.JITCompiled()` - JIT support/engagement is
   observable (v1 could silently run JIT-less).
 - `GroupNumbersForName` - enumerate all groups behind a DUPNAMES name.
+- `Regexp.Info(key)` - numeric `pcre2_pattern_info` queries through the
+  `INFO_*` keys (`INFO_MINLENGTH`, `INFO_MAXLOOKBEHIND`, `INFO_SIZE`, ...);
+  pointer-valued and unknown keys return an error.
 - `ParseFlagsStrict` / `CompileParseStrict` - see above.
 - `Regexp.Free()` / `Matcher.Free()` - deterministic release.
 - `LITERAL`, `ENDANCHORED`, `MATCH_INVALID_UTF`, `NO_JIT` and further

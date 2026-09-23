@@ -28,13 +28,12 @@ type CaptureName struct {
 // the NUL-terminated name.
 func (re Regexp) CaptureNames() []CaptureName {
 	return use(re.code, func(p *C.pcre2_code) []CaptureName {
-		var nameCount, entrySize C.uint32_t
-		var table *C.PCRE2_UCHAR
-		C.pcre2_pattern_info(p, C.PCRE2_INFO_NAMECOUNT, unsafe.Pointer(&nameCount))
+		nameCount := info32(p, C.PCRE2_INFO_NAMECOUNT)
 		if nameCount == 0 {
 			return nil
 		}
-		C.pcre2_pattern_info(p, C.PCRE2_INFO_NAMEENTRYSIZE, unsafe.Pointer(&entrySize))
+		entrySize := info32(p, C.PCRE2_INFO_NAMEENTRYSIZE)
+		var table *C.PCRE2_UCHAR // the one pointer-valued key this package reads
 		C.pcre2_pattern_info(p, C.PCRE2_INFO_NAMETABLE, unsafe.Pointer(&table))
 
 		// The table is C memory inside the compiled pattern; all names are

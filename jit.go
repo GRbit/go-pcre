@@ -30,10 +30,7 @@ func JITAvailable() bool {
 // support; this is the observable truth.
 func (re Regexp) JITCompiled() bool {
 	return use(re.code, func(p *C.pcre2_code) bool {
-		var size C.size_t // JITSIZE writes a size_t, unlike the uint32 queries
-		C.pcre2_pattern_info(p, C.PCRE2_INFO_JITSIZE, unsafe.Pointer(&size))
-
-		return size != 0
+		return infoSize(p, C.PCRE2_INFO_JITSIZE) != 0
 	})
 }
 

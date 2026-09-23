@@ -153,6 +153,19 @@ MULTITHREADING): a fully constructed Regexp (compiled + JIT done) is safe
 for concurrent matching; each goroutine needs its own Matcher; `Free` must
 not race with use. Validated under `-race` by TestConcurrent.
 
+## Pattern facts
+
+`pcre2_pattern_info` writes through a pointer whose C width depends on the
+key (uint32 for most, size_t for SIZE/JITSIZE, a pointer for NAMETABLE and
+FIRSTBITMAP), so the width is decided once, by key, in `info.go`
+(`info32`, `infoSize`; `#cgo noescape` keeps the output variable on the Go
+stack). The immutable facts a Regexp needs at match time - capture count,
+UTF, newline convention - are queried once in `Compile` and cached on the
+Regexp, so binding a Matcher costs no cgo round trip; `Groups()` serves
+the cache after the handle check. `Regexp.Info` exposes the numeric keys
+to callers; `JITCompiled` (size_t) and `CaptureNames` (the table pointer)
+are the typed front ends for the special ones.
+
 ## Names, config, flag parsing
 
 The 8-bit name table format is unchanged from PCRE1 (2 bytes group number

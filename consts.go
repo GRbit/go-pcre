@@ -143,8 +143,10 @@ const (
 	CONFIG_STACKRECURSE   = C.PCRE2_CONFIG_STACKRECURSE
 )
 
-// Pattern info keys (pcre2_pattern_info), used internally by Groups and
-// CaptureNames and exported for direct queries.
+// Pattern info keys for Regexp.Info (pcre2_pattern_info). Groups,
+// CaptureNames and JITCompiled are typed front ends for the keys they
+// cover; the pointer-valued keys (NAMETABLE, FIRSTBITMAP) are listed for
+// completeness and rejected by Info.
 const (
 	INFO_ALLOPTIONS    = C.PCRE2_INFO_ALLOPTIONS
 	INFO_ARGOPTIONS    = C.PCRE2_INFO_ARGOPTIONS

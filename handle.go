@@ -62,6 +62,13 @@ func unusable[P comparable]() string {
 	return "pcre: use of uninitialized or freed " + handleName[P]()
 }
 
+// check panics exactly as use would on a zero or freed handle, for
+// methods that serve facts cached at construction without touching the
+// block.
+func (h *handle[P]) check() {
+	h.ptr()
+}
+
 // use runs f with the block's pointer and keeps the handle alive until f
 // returns. f must not retain the pointer.
 func use[P comparable, R any](h *handle[P], f func(P) R) R {
