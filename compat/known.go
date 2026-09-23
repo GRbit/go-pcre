@@ -33,6 +33,21 @@ func explains(tag, field string) bool {
 	return strings.HasPrefix(tag, "DIALECT:") || strings.HasPrefix(tag, "FLAGS:")
 }
 
+// missingKnown returns the annotated tags that explained no diff. Each
+// tag must reproduce on its own: a diff explained by another tag of the
+// same case, or by a global rule (D1, D2, D11), does not vouch for it, so
+// a stale annotation cannot hide behind an unrelated divergence.
+func missingKnown(known []string, fired map[string]bool) []string {
+	var missing []string
+	for _, tag := range known {
+		if !fired[tag] {
+			missing = append(missing, tag)
+		}
+	}
+
+	return missing
+}
+
 // classify tags one diff with the divergence that explains it, or ""
 // when it is unexplained. Global rules recognize divergences that are
 // mechanical consequences of the migration (documented in MIGRATION.md)

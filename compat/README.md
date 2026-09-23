@@ -58,3 +58,6 @@ rules (compile-error wording, D3). A tag explains only the fields its
 divergence touches (`knownFields` in known.go: D4/D5/D12 the iteration
 outputs, D3 the compile offset; `DIALECT:*` and `FLAGS:*` everything), so
 a diff in any other field of an annotated case still fails the run.
+Reproduction is checked per tag: every tag listed in `Known` must explain
+at least one diff itself; a diff explained by another tag or by a global
+rule does not count for it.

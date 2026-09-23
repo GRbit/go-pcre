@@ -2,6 +2,21 @@ package compat
 
 import "testing"
 
+func TestMissingKnownIsPerTag(t *testing.T) {
+	// A case annotated Known=[D4, D5] whose only explained diff came from
+	// D5 (or from a global rule) has a stale D4: it must be reported.
+	fired := map[string]bool{"D5": true, "D2": true}
+	if got := missingKnown([]string{"D4", "D5"}, fired); len(got) != 1 || got[0] != "D4" {
+		t.Errorf("missingKnown = %v, want [D4]", got)
+	}
+	if got := missingKnown([]string{"D4"}, map[string]bool{"D2": true}); len(got) != 1 {
+		t.Errorf("a global-rule tag must not vouch for D4: got %v", got)
+	}
+	if got := missingKnown(nil, fired); got != nil {
+		t.Errorf("no annotation, nothing missing: got %v", got)
+	}
+}
+
 func TestClassifyRestrictsKnownToItsFields(t *testing.T) {
 	// A Known annotation vouches only for the fields its divergence
 	// touches; anything else on the same case must stay unexplained.

@@ -3,6 +3,7 @@ package compat
 import (
 	"fmt"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -37,7 +38,7 @@ func TestDiff(t *testing.T) {
 func runCase(t *testing.T, c Case) {
 	t.Helper()
 
-	knownFired := false
+	fired := map[string]bool{}
 	// Per (jit, eflags) variant, keep the byte-API records of both sides
 	// for the string-vs-bytes parity check.
 	type sideRecs struct{ r1, r2 *Record }
@@ -61,7 +62,9 @@ func runCase(t *testing.T, c Case) {
 		for _, d := range diffs {
 			tag := classify(c, r1, r2, d)
 			if tag != "" {
-				knownFired = true
+				for _, t := range strings.Split(tag, "+") {
+					fired[t] = true
+				}
 			} else {
 				t.Errorf("[%s] UNEXPLAINED diff in %s:\n  v1: %s\n  v2: %s",
 					ax, d.Field, d.V1, d.V2)
@@ -71,8 +74,8 @@ func runCase(t *testing.T, c Case) {
 		collect(c, ax.String(), tagged)
 	}
 
-	if len(c.Known) > 0 && !knownFired {
-		t.Errorf("case is annotated Known=%v but v1 and v2 agreed on every axis; "+
-			"either the divergence no longer reproduces or the annotation is wrong", c.Known)
+	for _, tag := range missingKnown(c.Known, fired) {
+		t.Errorf("case is annotated Known=%s but no diff on any axis was explained by it; "+
+			"either the divergence no longer reproduces or the annotation is wrong", tag)
 	}
 }
