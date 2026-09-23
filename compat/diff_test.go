@@ -44,8 +44,8 @@ func runCase(t *testing.T, c Case) {
 	bytesRecs := map[string]sideRecs{}
 
 	for _, ax := range axes(c) {
-		r1 := captureV1(c, ax)
-		r2 := captureV2(c, ax)
+		r1 := capture(engineV1{}, c, ax)
+		r2 := capture(engineV2{}, c, ax)
 
 		diffs := diffRecords(r1, r2)
 

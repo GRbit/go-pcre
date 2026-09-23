@@ -38,6 +38,16 @@ one): unexplained differences first (each
 with a repro command), then counts of known divergences by tag, then the
 ConfigAll dumps of both libraries.
 
+## Layout of the harness
+
+`capture.go` holds the `engine` seam and the single driver `capture`,
+which runs one (case, axis) pair and fills a `Record`. `capture_v1.go`
+and `capture_v2.go` are the two adapters: flag tables, error-code names,
+compile-error extraction and named-lookup error classification, plus thin
+delegations to each library. A third engine (another major version, or a
+different build of the same one) is one more adapter file and one more
+call in `runCase`; the observation sequence is never duplicated.
+
 ## Adding cases
 
 Add a `Case` to the matching `corpus_*.go` file (or a new category file

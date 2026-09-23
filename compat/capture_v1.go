@@ -39,19 +39,6 @@ var eFlags1 = map[string]int{
 	"PARTIAL_HARD":      pcre1.PARTIAL_HARD,
 }
 
-func resolveFlags(m map[string]int, names []string, side string) int {
-	f := 0
-	for _, n := range names {
-		v, ok := m[n]
-		if !ok {
-			panic("compat: flag " + n + " has no " + side + " mapping")
-		}
-		f |= v
-	}
-
-	return f
-}
-
 // jitStudy1 requests JIT for complete and both partial modes, so every
 // exec-flag variant of a case runs JIT-compiled on the JIT axis.
 const jitStudy1 = pcre1.STUDY_JIT_COMPILE |
@@ -133,127 +120,81 @@ func namedErr1(err error) string {
 	}
 }
 
-func captureV1(c Case, ax Axis) *Record {
-	r := &Record{CompileOffset: -1}
+// engineV1 is the v1 (PCRE 8.x) adapter of the engine seam.
+type engineV1 struct{}
 
+func (engineV1) compile(pattern string, cflags []string, jit bool) (compiled, error) {
+	f := resolveFlags(cFlags1, cflags, "v1")
 	var re pcre1.Regexp
-	var cerr error
-	if p := guard(func() {
-		if ax.JIT {
-			re, cerr = pcre1.CompileJIT(c.Pattern, resolveFlags(cFlags1, c.CFlags, "v1"), jitStudy1)
-		} else {
-			re, cerr = pcre1.Compile(c.Pattern, resolveFlags(cFlags1, c.CFlags, "v1"))
-		}
-	}); p != "" {
-		r.CompileMsg = p
-
-		return r
-	}
-	if cerr != nil {
-		r.CompileOffset, r.CompileMsg = parseV1CompileErr(c.Pattern, cerr)
-
-		return r
-	}
-	r.CompileOK = true
-
-	r.Groups = re.Groups()
-	names := map[string]bool{}
-	for _, cn := range re.CaptureNames() {
-		r.Names = append(r.Names, fmt.Sprintf("%s=%d", cn.Name, cn.Index))
-		names[cn.Name] = true
-	}
-
-	ef := resolveFlags(eFlags1, ax.EFlags, "v1")
-	m := new(pcre1.Matcher)
-	r.Panic = guard(func() {
-		if ax.Str {
-			m.ResetString(re, c.Subject, ef)
-		} else {
-			m.Reset(re, []byte(c.Subject), ef)
-		}
-	})
-
-	// Raw return code, re-run through Exec: it bypasses v1's checkMatch,
-	// which panics on several codes (D1), so this works even when the
-	// Reset above panicked (the Matcher is initialized before matching).
-	rawRC := 0
-	if p := guard(func() {
-		if ax.Str {
-			rawRC = m.ExecString(c.Subject, ef)
-		} else {
-			rawRC = m.Exec([]byte(c.Subject), ef)
-		}
-	}); p != "" {
-		r.ExecRC = p
+	var err error
+	if jit {
+		re, err = pcre1.CompileJIT(pattern, f, jitStudy1)
 	} else {
-		r.ExecRC = rcName1(rawRC)
+		re, err = pcre1.Compile(pattern, f)
 	}
 
-	r.Matches, r.Partial = m.Matches, m.Partial
-	if m.Error != nil {
-		r.MatchErr = rcName1(rawRC)
-	}
-
-	if m.Matches {
-		for g := 0; g <= r.Groups; g++ {
-			if gi := m.GroupIndices(g); gi == nil {
-				r.GroupSpans = append(r.GroupSpans, "unset")
-			} else {
-				r.GroupSpans = append(r.GroupSpans, span(gi[0], gi[1]))
-			}
-		}
-		if ax.Str {
-			for _, s := range m.ExtractString() {
-				r.Extract = append(r.Extract, strconv.Quote(s))
-			}
-		} else {
-			for _, b := range m.Extract() {
-				r.Extract = append(r.Extract, strconv.Quote(string(b)))
-			}
-		}
-	}
-
-	if len(names) > 0 {
-		r.Named = map[string]NamedResult{}
-		for name := range names {
-			var nr NamedResult
-			if p := guard(func() {
-				if ax.Str {
-					v, err := m.NamedString(name)
-					nr.Val = strconv.Quote(v)
-					nr.Err = namedErr1(err)
-				} else {
-					v, err := m.Named(name)
-					nr.Val = strconv.Quote(string(v))
-					nr.Err = namedErr1(err)
-				}
-				nr.Present = m.NamedPresent(name)
-			}); p != "" {
-				nr.Err = p
-			}
-			r.Named[name] = nr
-		}
-	}
-
-	if p := guard(func() {
-		if fi := re.FindIndex([]byte(c.Subject), ef); fi != nil {
-			r.FindIndex = span(fi[0], fi[1])
-		}
-		r.FindStr = strconv.Quote(re.FindString(c.Subject, ef))
-		r.FindAll = spansOf(re.FindAllIndex([]byte(c.Subject), ef))
-	}); p != "" {
-		r.FindIndex = p
-	}
-
-	if p := guard(func() {
-		if ax.Str {
-			r.ReplaceAll = strconv.Quote(re.ReplaceAllString(c.Subject, c.replacement(), ef))
-		} else {
-			r.ReplaceAll = strconv.Quote(string(re.ReplaceAll([]byte(c.Subject), []byte(c.replacement()), ef)))
-		}
-	}); p != "" {
-		r.ReplaceAll = p
-	}
-
-	return r
+	return compiled1{re}, err
 }
+
+func (engineV1) execFlags(names []string) int { return resolveFlags(eFlags1, names, "v1") }
+
+func (engineV1) compileErr(pattern string, err error) (int, string) {
+	return parseV1CompileErr(pattern, err)
+}
+
+func (engineV1) rcName(rc int) string { return rcName1(rc) }
+
+// v1's Matcher.Error carries no code; the raw Exec code names it.
+func (engineV1) matchErr(_ error, rawRC int) string { return rcName1(rawRC) }
+
+func (engineV1) namedErr(err error) string { return namedErr1(err) }
+
+type compiled1 struct{ re pcre1.Regexp }
+
+func (c compiled1) groups() int { return c.re.Groups() }
+
+func (c compiled1) captureNames() []captureName {
+	var out []captureName
+	for _, cn := range c.re.CaptureNames() {
+		out = append(out, captureName{Name: cn.Name, Index: cn.Index})
+	}
+
+	return out
+}
+
+// newMatcher returns an unbound Matcher, as the driver's Reset is the
+// first observation and must be able to panic on its own.
+func (c compiled1) newMatcher() matcher { return matcher1{re: c.re, m: new(pcre1.Matcher)} }
+
+func (c compiled1) findIndex(subject []byte, ef int) []int   { return c.re.FindIndex(subject, ef) }
+func (c compiled1) findString(subject string, ef int) string { return c.re.FindString(subject, ef) }
+func (c compiled1) findAllIndex(subject []byte, ef int) [][]int {
+	return c.re.FindAllIndex(subject, ef)
+}
+func (c compiled1) replaceAll(subject, repl []byte, ef int) []byte {
+	return c.re.ReplaceAll(subject, repl, ef)
+}
+func (c compiled1) replaceAllString(subject, repl string, ef int) string {
+	return c.re.ReplaceAllString(subject, repl, ef)
+}
+
+type matcher1 struct {
+	re pcre1.Regexp
+	m  *pcre1.Matcher
+}
+
+func (m matcher1) reset(subject []byte, ef int)          { m.m.Reset(m.re, subject, ef) }
+func (m matcher1) resetString(subject string, ef int)    { m.m.ResetString(m.re, subject, ef) }
+func (m matcher1) exec(subject []byte, ef int) int       { return m.m.Exec(subject, ef) }
+func (m matcher1) execString(subject string, ef int) int { return m.m.ExecString(subject, ef) }
+func (m matcher1) matches() bool                         { return m.m.Matches }
+func (m matcher1) partial() bool                         { return m.m.Partial }
+func (m matcher1) err() error                            { return m.m.Error }
+func (m matcher1) groupIndices(g int) []int              { return m.m.GroupIndices(g) }
+func (m matcher1) extract() [][]byte                     { return m.m.Extract() }
+func (m matcher1) extractString() []string               { return m.m.ExtractString() }
+func (m matcher1) named(name string) ([]byte, error)     { return m.m.Named(name) }
+func (m matcher1) namedString(name string) (string, error) {
+	return m.m.NamedString(name)
+}
+func (m matcher1) namedPresent(name string) bool { return m.m.NamedPresent(name) }
