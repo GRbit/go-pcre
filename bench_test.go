@@ -101,3 +101,137 @@ func BenchmarkReplaceAllTemplate(b *testing.B) {
 		}
 	}
 }
+
+// The benchmarks below cover the paths the v2 refactors touch and the v1
+// suite never measured: Matcher construction, the pooled stateless
+// helpers, the Find family, the accessors, and flag parsing.
+
+func BenchmarkNewMatcher(b *testing.B) {
+	re := MustCompile(dateCheckPattern, 0)
+	subj := []byte(`20-10-2023`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		m := re.NewMatcher(subj, 0)
+		if !m.Matches {
+			b.Fatal("should match")
+		}
+		m.Free()
+	}
+}
+
+func BenchmarkMatchWFlags(b *testing.B) {
+	re := MustCompile(dateCheckPattern, 0)
+	subj := []byte(`20-10-2023`)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if !re.MatchWFlags(subj, 0) {
+			b.Fatal("should match")
+		}
+	}
+}
+
+func BenchmarkFindIndex(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := []byte("food fight fools foo")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if re.FindIndex(subj, 0) == nil {
+			b.Fatal("should match")
+		}
+	}
+}
+
+func BenchmarkFindString(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := "food fight fools foo"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if re.FindString(subj, 0) == "" {
+			b.Fatal("should match")
+		}
+	}
+}
+
+func BenchmarkFindAllIndex(b *testing.B) {
+	re := MustCompile("foo", 0)
+	subj := []byte(strings.Repeat("foo bar baz ", 100))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if len(re.FindAllIndex(subj, 0)) != 100 {
+			b.Fatal("want 100 matches")
+		}
+	}
+}
+
+func BenchmarkFindAllIndexEmptyMatches(b *testing.B) {
+	// Empty-width matches exercise the retry and bump-along branches.
+	re := MustCompile("x*", 0)
+	subj := []byte(strings.Repeat("ab", 50))
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if len(re.FindAllIndex(subj, 0)) != 101 {
+			b.Fatal("want 101 matches")
+		}
+	}
+}
+
+func BenchmarkGroupString(b *testing.B) {
+	re := MustCompile(`(\w+)@(\w+)`, 0)
+	m := re.NewMatcherString("bob@example", 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if m.GroupString(2) != "example" {
+			b.Fatal("bad group")
+		}
+	}
+}
+
+func BenchmarkExtractString(b *testing.B) {
+	re := MustCompile(`(\w+)@(\w+)`, 0)
+	m := re.NewMatcherString("bob@example", 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if len(m.ExtractString()) != 3 {
+			b.Fatal("bad extract")
+		}
+	}
+}
+
+func BenchmarkNamedString(b *testing.B) {
+	re := MustCompile(`(?<user>\w+)@(?<host>\w+)`, 0)
+	m := re.NewMatcherString("bob@example", 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if s, err := m.NamedString("host"); err != nil || s != "example" {
+			b.Fatal("bad named group")
+		}
+	}
+}
+
+func BenchmarkGroups(b *testing.B) {
+	re := MustCompile(dateCheckPattern, 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if re.Groups() != 4 {
+			b.Fatal("want 4 groups")
+		}
+	}
+}
+
+func BenchmarkCaptureNames(b *testing.B) {
+	re := MustCompile(`(?<user>\w+)@(?<host>\w+)`, 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if len(re.CaptureNames()) != 2 {
+			b.Fatal("want 2 names")
+		}
+	}
+}
+
+func BenchmarkParseFlags(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		if _, f := ParseFlags("(?im)(?s)^abc$"); f != CASELESS|MULTILINE|DOTALL {
+			b.Fatal("bad flags")
+		}
+	}
+}
