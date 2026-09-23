@@ -71,11 +71,22 @@ prior-art bugs govern every accessor:
   `pcre_exec` reset it to -1), so every accessor gates on `m.Matches`
   first, never on ovector sentinel values.
 
+Both rules are enforced in one function, `span`; the only other reader of
+the ovector is the aliasing in `init`. The stateless helpers never touch
+it: they call `match` (the native-startoffset primitive) and consume the
+whole-match span it returns, so `FindIndex`, `FindString`, `iterate` and
+the Matcher accessors are all consumers of the same primitive.
+
 `exec` passes the subject zero-copy (`&b[0]` + length; empty subject -> a
 1-byte dummy with true length 0) and takes a native `startOffset`. String
 subjects are converted once per call; the copy doubles as `SubjectB`, so
-the byte/string accessor fallbacks work exactly as in v1. Match failures
+`Group` always slices the bytes and `GroupString` falls back to them for
+a byte subject (unlike v1, `Group` has no fallback into `GroupString`:
+that mutual fallback recursed forever on a nil subject). Match failures
 other than NOMATCH/PARTIAL become `*MatchError` in `m.Error` - no panics.
+The stateless helpers report such a failure as no match (v1 parity,
+pinned by `TestHelpersReportMatchErrorAsNoMatch`); `putMatcher` drops the
+error together with the pooled Matcher.
 
 ## Matcher pooling for the stateless helpers
 

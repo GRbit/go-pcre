@@ -1,6 +1,7 @@
 package pcre
 
 import (
+	"bytes"
 	"reflect"
 	"testing"
 	"time"
@@ -98,5 +99,33 @@ func TestIterateAbandonsBackwardsKMatch(t *testing.T) {
 		if got := re.ReplaceAllString(c.subject, "-", 0); got != c.wantRepl {
 			t.Errorf("ReplaceAllString(%s, %q) = %q, want %q", c.pattern, c.subject, got, c.wantRepl)
 		}
+	}
+}
+
+func TestHelpersReportMatchErrorAsNoMatch(t *testing.T) {
+	// The stateless helpers cannot return a match error, so an invalid
+	// UTF-8 subject (a *MatchError through the Matcher API) must look like
+	// a plain no-match to them, as in v1. This pins the policy stated in
+	// the package comment; observing the error requires a Matcher.
+	re := MustCompile("a", UTF)
+	subject := []byte{0xff, 0xfe, 'a'}
+
+	if m := re.NewMatcher(subject, 0); m.Matches || m.Error == nil {
+		t.Fatalf("Matcher: Matches=%v Error=%v, want a match error", m.Matches, m.Error)
+	}
+	if re.MatchWFlags(subject, 0) {
+		t.Error("MatchWFlags: want false")
+	}
+	if got := re.FindIndex(subject, 0); got != nil {
+		t.Errorf("FindIndex: got %v, want nil", got)
+	}
+	if got := re.FindString(string(subject), 0); got != "" {
+		t.Errorf("FindString: got %q, want empty", got)
+	}
+	if got := re.FindAllIndex(subject, 0); got != nil {
+		t.Errorf("FindAllIndex: got %v, want nil", got)
+	}
+	if got := re.ReplaceAll(subject, []byte("x"), 0); !bytes.Equal(got, subject) {
+		t.Errorf("ReplaceAll: got %q, want the subject unchanged", got)
 	}
 }

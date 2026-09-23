@@ -15,6 +15,11 @@
 // stateful and must only be used by one goroutine at a time. Free must not
 // be called while other goroutines use the Regexp.
 //
+// Match errors: the stateless helpers (MatchWFlags, Find*, ReplaceAll)
+// treat a match-time error (invalid UTF subject, match or depth limit) as
+// no match, exactly as v1 did. To observe the error, match through a
+// Matcher and read Matcher.Error.
+//
 // Requirements: libpcre2-8 >= 10.34 (Debian/Ubuntu: apt install
 // libpcre2-dev). Features that need a newer libpcre2 are gated to fail at
 // build time rather than silently degrade.

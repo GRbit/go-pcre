@@ -95,20 +95,24 @@ func (re *Regexp) putMatcher(m *Matcher) {
 }
 
 // MatchWFlags tries to match the specified byte array slice to the
-// pattern. Returns true if the match succeeds.
+// pattern. Returns true if the match succeeds. Like every stateless helper
+// it reports a match error (invalid UTF subject, match limit) as false;
+// use a Matcher to observe the error.
 func (re *Regexp) MatchWFlags(subject []byte, flags int) bool {
 	m := re.matcherFromPool()
 	defer re.putMatcher(m)
+	_, _, ok := m.match(subject, 0, flags)
 
-	return m.matchWithOffset(subject, 0, flags)
+	return ok
 }
 
 // MatchStringWFlags is the same as MatchWFlags, but accept string as argument.
 func (re *Regexp) MatchStringWFlags(subject string, flags int) bool {
 	m := re.matcherFromPool()
 	defer re.putMatcher(m)
+	_, _, ok := m.match([]byte(subject), 0, flags)
 
-	return m.matchWithOffset([]byte(subject), 0, flags)
+	return ok
 }
 
 // NewMatcher return a new matcher object, with the byte array slice as a
@@ -236,12 +240,20 @@ func (m *Matcher) finish(rc int) bool {
 	return m.Matches
 }
 
-// matchWithOffset is the native-startoffset primitive behind the
-// Find/Replace iteration: a match at offset within the full subject.
-func (m *Matcher) matchWithOffset(subject []byte, offset, flags int) bool {
+// match is the primitive behind every stateless helper (MatchWFlags,
+// Find*, ReplaceAll): one pcre2_match at offset within the whole subject,
+// recorded in the Matcher exactly like the exported Exec, returning the
+// whole-match span. ok is false both on no-match and on a match error;
+// the helpers treat the two alike (v1 parity) and the error stays
+// observable only through Matcher.Error. Nothing outside match and span
+// reads the ovector.
+func (m *Matcher) match(subject []byte, offset, flags int) (start, end int, ok bool) {
 	m.SubjectS, m.SubjectB = "", subject
+	if !m.finish(m.exec(subject, offset, flags)) {
+		return 0, 0, false
+	}
 
-	return m.finish(m.exec(subject, offset, flags))
+	return m.span(0)
 }
 
 // MatchWFlags tries to match the specified byte array slice to the

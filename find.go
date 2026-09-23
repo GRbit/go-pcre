@@ -35,9 +35,10 @@ func (re *Regexp) iterate(m *Matcher, subject []byte, flags int, yield func(star
 		if retry {
 			f |= NOTEMPTY_ATSTART | ANCHORED
 		}
-		if !m.matchWithOffset(subject, offset, f) {
+		start, end, ok := m.match(subject, offset, f)
+		if !ok {
 			if !retry {
-				return // definitive no-match (or error in m.Error)
+				return // definitive no-match, or a match error (see match)
 			}
 			// No non-empty match at this offset: step past it.
 			offset = re.bumpAlong(subject, offset)
@@ -46,7 +47,6 @@ func (re *Regexp) iterate(m *Matcher, subject []byte, flags int, yield func(star
 			continue
 		}
 
-		start, end := int(m.ovector[0]), int(m.ovector[1])
 		if end < start || start < offset {
 			// \K inside a lookaround moved the match start after its own end
 			// or before the search offset (compiles only on libpcre2 < 10.38).
@@ -100,8 +100,8 @@ func (re *Regexp) FindIndex(bytes []byte, flags int) []int {
 	m := re.matcherFromPool()
 	defer re.putMatcher(m)
 
-	if m.matchWithOffset(bytes, 0, flags) {
-		return []int{int(m.ovector[0]), int(m.ovector[1])}
+	if start, end, ok := m.match(bytes, 0, flags); ok {
+		return []int{start, end}
 	}
 
 	return nil
@@ -115,8 +115,8 @@ func (re *Regexp) FindString(s string, flags int) string {
 	m := re.matcherFromPool()
 	defer re.putMatcher(m)
 
-	if m.matchWithOffset([]byte(s), 0, flags) {
-		return s[int(m.ovector[0]):int(m.ovector[1])]
+	if start, end, ok := m.match([]byte(s), 0, flags); ok {
+		return s[start:end]
 	}
 
 	return ""

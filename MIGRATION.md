@@ -208,7 +208,7 @@ everything at once:
 | `Matches bool` | Same. |
 | `Partial bool` | Same meaning; the underlying C code changed from -12 to -2 (see `ERROR_PARTIAL`). |
 | `Error error` | Now a typed `*MatchError{Code, Message}` (D1); v1 stored a formatted string and panicked on several codes. |
-| `SubjectS string` | Same, including the fallback rules between the string and []byte accessor paths. |
+| `SubjectS string` | Same. `GroupString` still falls back to `SubjectB` for a byte subject; `Group` no longer falls back to `SubjectS` (see `Group`). |
 | `SubjectB []byte` | Same. |
 
 ### Types
