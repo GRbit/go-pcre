@@ -12,7 +12,6 @@ import (
 	"errors"
 	"fmt"
 	"runtime"
-	"sync"
 	"sync/atomic"
 	"unsafe"
 )
@@ -26,33 +25,17 @@ const unset = ^C.PCRE2_SIZE(0)
 // to observe that cleanups actually release match data.
 var matchDatasFreed atomic.Uint64
 
-// matchData owns a pcre2_match_data block: C memory freed either explicitly
-// via Free or by a GC cleanup once the owning Matcher is unreachable.
-type matchData struct {
-	p       *C.pcre2_match_data
-	cleanup runtime.Cleanup
-	free    sync.Once
-}
+// matchData owns a pcre2_match_data block; it lives and dies with its
+// Matcher.
+type matchData = handle[*C.pcre2_match_data]
 
 func newMatchData(p *C.pcre2_match_data) *matchData {
-	h := &matchData{p: p}
-	h.cleanup = runtime.AddCleanup(h, freeMatchData, p)
-
-	return h
+	return newHandle(p, freeMatchData)
 }
 
 func freeMatchData(p *C.pcre2_match_data) {
 	C.pcre2_match_data_free(p)
 	matchDatasFreed.Add(1)
-}
-
-// Free releases the match data immediately. It is idempotent.
-func (h *matchData) Free() {
-	h.free.Do(func() {
-		h.cleanup.Stop()
-		freeMatchData(h.p)
-		h.p = nil
-	})
 }
 
 // MatchError is stored in Matcher.Error when pcre2_match fails with
@@ -91,7 +74,7 @@ func (re *Regexp) matcherFromPool() *Matcher {
 	if re.code == nil {
 		panic("pcre: use of uninitialized or freed Regexp")
 	}
-	if v := re.code.matchers.Get(); v != nil {
+	if v := re.matchers.Get(); v != nil {
 		return v.(*Matcher) // pool entries are always bound to re.code
 	}
 
@@ -108,7 +91,7 @@ func (re *Regexp) putMatcher(m *Matcher) {
 	m.Error = nil
 	m.SubjectB = nil
 	m.SubjectS = ""
-	re.code.matchers.Put(m)
+	re.matchers.Put(m)
 }
 
 // MatchWFlags tries to match the specified byte array slice to the
@@ -181,8 +164,9 @@ func (m *Matcher) init(re Regexp) {
 
 	m.re = re
 	m.Groups = re.Groups()
-	md := C.pcre2_match_data_create_from_pattern(re.code.ptr(), nil)
-	runtime.KeepAlive(re.code)
+	md := use(re.code, func(p *C.pcre2_code) *C.pcre2_match_data {
+		return C.pcre2_match_data_create_from_pattern(p, nil)
+	})
 	if md == nil {
 		panic("pcre: pcre2_match_data_create_from_pattern: out of memory")
 	}
@@ -223,19 +207,16 @@ func (m *Matcher) ExecString(subject string, flags int) int {
 // true context before the offset (\b, lookbehind), which the Find/Replace
 // iteration relies on.
 func (m *Matcher) exec(subject []byte, startOffset, flags int) int {
-	if m.md == nil {
-		panic("pcre: use of uninitialized or freed Matcher")
-	}
-
-	rc := C.pcre2_match(m.re.code.ptr(), cptr(subject),
+	// The one C call that bypasses use: pcre2_match is the hot path and the
+	// closure indirection of use costs about 5% on a JIT match, so the
+	// KeepAlive discipline is spelled out by hand here. Match data first: a
+	// zero or freed Matcher reports itself, not its Regexp.
+	md, code := m.md.ptr(), m.re.code.ptr()
+	rc := C.pcre2_match(code, cptr(subject),
 		C.PCRE2_SIZE(len(subject)), C.PCRE2_SIZE(startOffset),
-		C.uint32_t(flags), m.md.p, nil)
-
-	// Keep both C blocks alive for the duration of the pcre2_match call
-	// above; without this a GC cleanup could free them mid-call if the
-	// Matcher itself is no longer referenced afterwards.
-	runtime.KeepAlive(m.re.code)
+		C.uint32_t(flags), md, nil)
 	runtime.KeepAlive(m.md)
+	runtime.KeepAlive(m.re.code)
 
 	return int(rc)
 }
@@ -400,9 +381,9 @@ func (m *Matcher) name2index(name string) (int, error) {
 	nameC := C.CString(name)
 	defer C.free(unsafe.Pointer(nameC))
 
-	group := int(C.pcre2_substring_number_from_name(
-		m.re.code.ptr(), (*C.PCRE2_UCHAR)(unsafe.Pointer(nameC))))
-	runtime.KeepAlive(m.re.code)
+	group := int(use(m.re.code, func(p *C.pcre2_code) C.int {
+		return C.pcre2_substring_number_from_name(p, (*C.PCRE2_UCHAR)(unsafe.Pointer(nameC)))
+	}))
 	switch {
 	case group == ERROR_NOUNIQUESUBSTRING:
 		return 0, fmt.Errorf("pcre: Matcher.Named: %q: %w", name, ErrNonUniqueName)

@@ -9,7 +9,6 @@ import "C"
 
 import (
 	"fmt"
-	"runtime"
 	"unsafe"
 )
 
@@ -74,12 +73,13 @@ func (re Regexp) substituteAll(subject, template []byte, flags int) ([]byte, err
 	buf := make([]byte, len(subject)+len(template)+64)
 	for attempt := 0; ; attempt++ {
 		outLen := C.PCRE2_SIZE(len(buf))
-		rc := C.pcre2_substitute(re.code.ptr(),
-			cptr(subject), C.PCRE2_SIZE(len(subject)), 0,
-			opts, nil, nil,
-			cptr(template), C.PCRE2_SIZE(len(template)),
-			(*C.PCRE2_UCHAR)(unsafe.Pointer(&buf[0])), &outLen)
-		runtime.KeepAlive(re.code)
+		rc := use(re.code, func(p *C.pcre2_code) C.int {
+			return C.pcre2_substitute(p,
+				cptr(subject), C.PCRE2_SIZE(len(subject)), 0,
+				opts, nil, nil,
+				cptr(template), C.PCRE2_SIZE(len(template)),
+				(*C.PCRE2_UCHAR)(unsafe.Pointer(&buf[0])), &outLen)
+		})
 
 		if rc == C.PCRE2_ERROR_NOMEMORY && attempt == 0 {
 			buf = make([]byte, outLen) // required size, incl. trailing NUL

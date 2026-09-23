@@ -33,7 +33,6 @@ import "C"
 
 import (
 	"fmt"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"unsafe"
@@ -44,28 +43,13 @@ import (
 // pattern).
 var codesFreed atomic.Uint64
 
-// codeHandle owns a compiled pattern. The pcre2_code block (including any
-// JIT data) is C memory that only pcre2_code_free can release, so it is
-// held behind this handle and freed either explicitly via Free or by a GC
-// cleanup once the last Regexp copy referring to it becomes unreachable.
-type codeHandle struct {
-	p       *C.pcre2_code
-	cleanup runtime.Cleanup
-	free    sync.Once
-
-	// matchers recycles Matchers (and their C match_data blocks) for the
-	// stateless helper APIs (MatchWFlags, Find*, ReplaceAll), which would
-	// otherwise create and abandon one pcre2_match_data per call. Entries
-	// reference this handle back; the cycle is collected as a unit and the
-	// match-data cleanups still run then.
-	matchers sync.Pool
-}
+// codeHandle owns a compiled pattern: the pcre2_code block, including any
+// JIT data, which only pcre2_code_free can release. All copies of a Regexp
+// share one handle.
+type codeHandle = handle[*C.pcre2_code]
 
 func newCodeHandle(p *C.pcre2_code) *codeHandle {
-	h := &codeHandle{p: p}
-	h.cleanup = runtime.AddCleanup(h, freeCode, p)
-
-	return h
+	return newHandle(p, freeCode)
 }
 
 func freeCode(p *C.pcre2_code) {
@@ -73,27 +57,18 @@ func freeCode(p *C.pcre2_code) {
 	codesFreed.Add(1)
 }
 
-// Free releases the compiled pattern immediately. It is idempotent. Calling
-// it concurrently with, or before, uses of any Regexp copy sharing this
-// handle is a data race (same contract as matching: see the package
-// comment).
-func (h *codeHandle) Free() {
-	h.free.Do(func() {
-		h.cleanup.Stop()
-		freeCode(h.p)
-		h.p = nil
-	})
-}
-
-// ptr returns the code pointer for a C call. Every caller must
-// runtime.KeepAlive(h) after the C call returns, so the cleanup cannot fire
-// while C still uses the pointer.
-func (h *codeHandle) ptr() *C.pcre2_code {
-	if h == nil || h.p == nil {
-		panic("pcre: use of uninitialized or freed Regexp")
+// handleName names the Go-level owner of a C block in use-after-free
+// panics: users know Regexp and Matcher, not pcre2_code and match_data.
+func handleName[P comparable]() string {
+	var nilP P
+	switch any(nilP).(type) {
+	case *C.pcre2_code:
+		return "Regexp"
+	case *C.pcre2_match_data:
+		return "Matcher"
 	}
 
-	return h.p
+	return "handle"
 }
 
 // CompileError is returned by Compile when PCRE2 rejects a pattern.
@@ -135,6 +110,13 @@ func cptr(b []byte) *C.PCRE2_UCHAR {
 // goroutines; see the package comment.
 type Regexp struct {
 	code *codeHandle
+
+	// matchers recycles Matchers (and their C match_data blocks) for the
+	// stateless helper APIs (MatchWFlags, Find*, ReplaceAll), which would
+	// otherwise create and abandon one pcre2_match_data per call. Shared by
+	// all copies of the Regexp, like code. Entries reference code back; the
+	// cycle is collected as a unit and the match-data cleanups still run.
+	matchers *sync.Pool
 
 	// Iteration facts queried once at compile time (pcre2_pattern_info):
 	// they steer the bump-along advance of the global-match protocol.
@@ -181,8 +163,9 @@ func Compile(pattern string, flags int) (Regexp, error) {
 	C.pcre2_pattern_info(p, C.PCRE2_INFO_NEWLINE, unsafe.Pointer(&nl))
 
 	return Regexp{
-		code: newCodeHandle(p),
-		utf:  opts&C.PCRE2_UTF != 0,
+		code:     newCodeHandle(p),
+		matchers: new(sync.Pool),
+		utf:      opts&C.PCRE2_UTF != 0,
 		crlfNewline: nl == C.PCRE2_NEWLINE_CRLF ||
 			nl == C.PCRE2_NEWLINE_ANY || nl == C.PCRE2_NEWLINE_ANYCRLF,
 	}, nil
@@ -200,11 +183,12 @@ func MustCompile(pattern string, flags int) (re Regexp) {
 
 // Groups returns the number of capture groups in the pattern.
 func (re Regexp) Groups() int {
-	var count C.uint32_t
-	C.pcre2_pattern_info(re.code.ptr(), C.PCRE2_INFO_CAPTURECOUNT, unsafe.Pointer(&count))
-	runtime.KeepAlive(re.code)
+	return int(use(re.code, func(p *C.pcre2_code) C.uint32_t {
+		var count C.uint32_t
+		C.pcre2_pattern_info(p, C.PCRE2_INFO_CAPTURECOUNT, unsafe.Pointer(&count))
 
-	return int(count)
+		return count
+	}))
 }
 
 // Free releases the compiled pattern immediately instead of waiting for

@@ -19,26 +19,31 @@ pointers (character tables, JIT data, allocator), so v2 owns C memory
 behind small handle types instead:
 
 ```
-codeHandle  - *pcre2_code       freed by pcre2_code_free
-matchData   - *pcre2_match_data freed by pcre2_match_data_free
+codeHandle = handle[pcre2_code]        freed by pcre2_code_free
+matchData  = handle[pcre2_match_data]  freed by pcre2_match_data_free
 ```
 
-Both follow the same lifecycle, generalized from v1's `extraHandle`:
+Both are instances of one generic `handle[T]` (`handle.go`), generalized
+from v1's `extraHandle`:
 
 - `runtime.AddCleanup` (Go 1.24) frees the block when the handle becomes
   unreachable - the backstop, not the API;
 - explicit, idempotent `Free()` (`sync.Once` + cleanup.Stop + nil-swap)
-  for deterministic release; use-after-free panics with a clear message;
-- **every C call using a handle is followed by `runtime.KeepAlive`** so a
-  cleanup cannot fire mid-call (the prior-art Jemmic wrapper omits this -
-  a latent free-during-call bug we did not inherit);
-- an atomic freed-counter per handle type (`codesFreed`,
+  for deterministic release; use-after-free panics with a clear message
+  naming the Go owner (Regexp or Matcher);
+- **the pointer is never handed out**: every C call goes through
+  `use(h, func(p *T) R)` (or `use2` for `pcre2_match`, which reads both
+  blocks), which runs `runtime.KeepAlive` after the call so a cleanup
+  cannot fire mid-call. The prior-art Jemmic wrapper omits the KeepAlive -
+  a latent free-during-call bug; here forgetting it is impossible rather
+  than merely reviewed for;
+- an atomic freed-counter per block type (`codesFreed`,
   `matchDatasFreed`) exists purely as a test hook for the GC tests.
 
-`Regexp` is `{expr string; code *codeHandle; utf, crlfNewline bool}` -
-freely copyable; all copies share the handle. The two bools are queried
-once at compile time (`PCRE2_INFO_ALLOPTIONS`, `PCRE2_INFO_NEWLINE`) and
-steer the iteration advance (below).
+`Regexp` is `{code *codeHandle; matchers *sync.Pool; utf, crlfNewline
+bool}` - freely copyable; all copies share the handle and the pool. The
+two bools are queried once at compile time (`PCRE2_INFO_ALLOPTIONS`,
+`PCRE2_INFO_NEWLINE`) and steer the iteration advance (below).
 
 ## Match state lives in pcre2_match_data
 
@@ -77,7 +82,8 @@ other than NOMATCH/PARTIAL become `*MatchError` in `m.Error` - no panics.
 `Regexp.MatchWFlags`, `Find*` and `ReplaceAll` are stateless per call; a
 naive implementation creates and abandons a C match_data each time (C
 malloc + cleanup churn - measured 5-8x slower than v1). Instead each
-`codeHandle` carries a `sync.Pool` of Matchers bound to that pattern.
+`Regexp` carries a `sync.Pool` of Matchers bound to its pattern (shared by
+all copies, like the code handle).
 Helpers take one, match, and put it back with subject references cleared
 (no pinned caller memory, no stale results). Pool entries reference the
 handle back; that cycle is collected as a unit and the match-data cleanup

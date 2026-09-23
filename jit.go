@@ -10,7 +10,6 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"unsafe"
 )
 
@@ -30,11 +29,12 @@ func JITAvailable() bool {
 // produce no JIT code when the pattern uses items the JIT does not
 // support; this is the observable truth.
 func (re Regexp) JITCompiled() bool {
-	var size C.size_t // JITSIZE writes a size_t, unlike the uint32 queries
-	C.pcre2_pattern_info(re.code.ptr(), C.PCRE2_INFO_JITSIZE, unsafe.Pointer(&size))
-	runtime.KeepAlive(re.code)
+	return use(re.code, func(p *C.pcre2_code) bool {
+		var size C.size_t // JITSIZE writes a size_t, unlike the uint32 queries
+		C.pcre2_pattern_info(p, C.PCRE2_INFO_JITSIZE, unsafe.Pointer(&size))
 
-	return size != 0
+		return size != 0
+	})
 }
 
 // Study JIT-compiles the pattern (pcre2_jit_compile), which gives a large
@@ -54,8 +54,9 @@ func (re *Regexp) Study(flags int) error {
 		return errors.New("regexp already optimized")
 	}
 
-	rc := C.pcre2_jit_compile(re.code.ptr(), C.uint32_t(flags))
-	runtime.KeepAlive(re.code)
+	rc := use(re.code, func(p *C.pcre2_code) C.int {
+		return C.pcre2_jit_compile(p, C.uint32_t(flags))
+	})
 	if rc != 0 {
 		return fmt.Errorf("pcre2_jit_compile (%d): %s", int(rc), errorMessage(rc))
 	}
