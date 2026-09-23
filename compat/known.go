@@ -1,12 +1,43 @@
 package compat
 
-import "strings"
+import (
+	"slices"
+	"strings"
+)
+
+// knownFields lists, per divergence tag, the record fields whose diffs the
+// tag can explain. A case annotation therefore vouches only for the
+// fields its divergence touches: a diff in any other field of the same
+// case stays unexplained and fails the run, instead of being absorbed by
+// an unrelated tag. Tags absent here are the DIALECT:* and FLAGS:*
+// families, which alter compile results and everything downstream and so
+// may explain any field.
+var knownFields = map[string][]string{
+	"D3":  {"compile-offset"},
+	"D4":  {"find-all", "replace-all"},
+	"D5":  {"find-all", "replace-all"},
+	"D12": {"find-all", "replace-all"},
+}
+
+// explains reports whether tag can account for a diff in field. Parity
+// fields (one side's byte API against its own string API) are never
+// explained by an annotation: the two APIs must agree on both sides.
+func explains(tag, field string) bool {
+	if strings.Contains(field, "-parity:") {
+		return false
+	}
+	if fields, ok := knownFields[tag]; ok {
+		return slices.Contains(fields, field)
+	}
+
+	return strings.HasPrefix(tag, "DIALECT:") || strings.HasPrefix(tag, "FLAGS:")
+}
 
 // classify tags one diff with the divergence that explains it, or ""
 // when it is unexplained. Global rules recognize divergences that are
 // mechanical consequences of the migration (documented in MIGRATION.md)
 // regardless of the pattern; everything else falls back to the case's
-// Known annotation.
+// Known annotation, restricted to the fields each tag can explain.
 func classify(c Case, r1, r2 *Record, d Diff) string {
 	switch {
 	// D2: NUL bytes in the pattern compile in v2, failed in v1.
@@ -27,9 +58,12 @@ func classify(c Case, r1, r2 *Record, d Diff) string {
 		return "D11"
 	}
 
-	if len(c.Known) > 0 {
-		return strings.Join(c.Known, "+")
+	var tags []string
+	for _, k := range c.Known {
+		if explains(k, d.Field) {
+			tags = append(tags, k)
+		}
 	}
 
-	return ""
+	return strings.Join(tags, "+")
 }

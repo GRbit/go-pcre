@@ -54,4 +54,7 @@ Add a `Case` to the matching `corpus_*.go` file (or a new category file
 wired into `allCases`). A case with `Known` tags MUST produce at least
 one difference (the suite fails when a documented divergence stops
 reproducing); a case without `Known` must produce none beyond the global
-rules (compile-error wording, D3).
+rules (compile-error wording, D3). A tag explains only the fields its
+divergence touches (`knownFields` in known.go: D4/D5/D12 the iteration
+outputs, D3 the compile offset; `DIALECT:*` and `FLAGS:*` everything), so
+a diff in any other field of an annotated case still fails the run.
