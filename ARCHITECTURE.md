@@ -174,7 +174,9 @@ MSB-first + NUL-terminated name); `CaptureNames` parses it from
 `pcre2_substring_nametable_scan` to enumerate DUPNAMES groups; `Named*`
 map `PCRE2_ERROR_NOUNIQUESUBSTRING` to `ErrNonUniqueName`. `Config` uses
 PCRE2's two protocols (uniform `uint32` numerics; NULL-probe-then-buffer
-strings). `ParseFlags` keeps v1's lenient historic scanner;
+strings). `ParseFlags` keeps v1's lenient historic scanner (a byte loop over the
+leading `(?letters)` groups: no pattern is compiled at package init and no
+cgo call is made);
 `ParseFlagsStrict` only consumes groups made entirely of known flag
 letters - everything else goes to the engine, which parses Perl's inline
 modifiers natively.

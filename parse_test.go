@@ -123,3 +123,25 @@ func TestCompileParseStrict(t *testing.T) {
 		t.Errorf("a(?R)?b should compile as recursion: %v", err)
 	}
 }
+
+func TestLeadingFlagGroup(t *testing.T) {
+	// The byte scanner must accept exactly what v1's `^\(\?[a-zA-Z]+?\)`
+	// regexp accepted: "(?" + one or more ASCII letters + ")".
+	for in, want := range map[string]int{
+		"":            0,
+		"(?)":         0,
+		"(?i":         0,
+		"(?i)":        4,
+		"(?imsx)abc":  7,
+		"(?:x)":       0,
+		"(?R)(?i)":    4,
+		"(?1)":        0,
+		"(?i-m)":      0,
+		"x(?i)":       0,
+		"(?\xc3\xa9)": 0, // non-ASCII letter: not a flag letter
+	} {
+		if got := leadingFlagGroup(in); got != want {
+			t.Errorf("leadingFlagGroup(%q) = %d, want %d", in, got, want)
+		}
+	}
+}

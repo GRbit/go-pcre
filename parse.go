@@ -2,8 +2,25 @@ package pcre
 
 import "fmt"
 
-// parseFlagsRe matches a leading "(?letters)" candidate flag group.
-var parseFlagsRe = MustCompile(`^\(\?[a-zA-Z]+?\)`, 0)
+// leadingFlagGroup returns the length of a leading "(?letters)" group in
+// s (at least one ASCII letter, nothing else before the closing paren), or
+// 0 when s does not start with one. This is v1's `^\(\?[a-zA-Z]+?\)`
+// scanner written as a byte loop: flag parsing must not depend on the
+// match machinery it is a front end for, and must cost no cgo call.
+func leadingFlagGroup(s string) int {
+	if len(s) < 4 || s[0] != '(' || s[1] != '?' {
+		return 0
+	}
+	i := 2
+	for i < len(s) && (s[i] >= 'a' && s[i] <= 'z' || s[i] >= 'A' && s[i] <= 'Z') {
+		i++
+	}
+	if i == 2 || i == len(s) || s[i] != ')' {
+		return 0
+	}
+
+	return i + 1
+}
 
 // flagLetters maps "(?flags)" letters to the compile flags they stand for.
 // X maps to EXTRA == 0: PCRE2 is strict by default, so the letter is
@@ -28,14 +45,14 @@ func parseFlags(ptr string, strict bool) (string, int) {
 	flags := 0
 
 	for {
-		fStr := parseFlagsRe.FindString(ptr, 0)
-		if fStr == "" {
+		n := leadingFlagGroup(ptr)
+		if n == 0 {
 			return ptr, flags
 		}
 
 		groupFlags := 0
-		for i := 2; i < len(fStr)-1; i++ { // letters between "(?" and ")"
-			f, known := flagLetters[fStr[i]]
+		for i := 2; i < n-1; i++ { // letters between "(?" and ")"
+			f, known := flagLetters[ptr[i]]
 			if !known && strict {
 				return ptr, flags
 			}
@@ -43,7 +60,7 @@ func parseFlags(ptr string, strict bool) (string, int) {
 		}
 
 		flags |= groupFlags
-		ptr = ptr[len(fStr):]
+		ptr = ptr[n:]
 	}
 }
 
