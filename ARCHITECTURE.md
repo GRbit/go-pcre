@@ -6,9 +6,10 @@ There is no C shim: every call goes straight through cgo
 `#include <pcre2.h>`). A `#error` in the preamble enforces the
 libpcre2 >= 10.34 floor at build time.
 
-File layout: `pcre2.go` (compile, lifetime), `matcher.go` (match state,
-accessors), `find.go` (iteration protocol), `replace.go` (replace loop +
-substitute), `jit.go`, `names.go`, `config.go`, `parse.go`, `consts.go`.
+File layout: `handle.go` (C memory lifetime), `pcre2.go` (compile),
+`info.go` (pattern facts), `matcher.go` (match state, accessors),
+`find.go` (iteration protocol), `replace.go` (replace loop + substitute),
+`jit.go`, `names.go`, `config.go`, `parse.go`, `consts.go`.
 
 ## Ownership: C pointers behind handles (the v1 trick is dead)
 
@@ -31,19 +32,23 @@ from v1's `extraHandle`:
 - explicit, idempotent `Free()` (`sync.Once` + cleanup.Stop + nil-swap)
   for deterministic release; use-after-free panics with a clear message
   naming the Go owner (Regexp or Matcher);
-- **the pointer is never handed out**: every C call goes through
-  `use(h, func(p *T) R)` (or `use2` for `pcre2_match`, which reads both
-  blocks), which runs `runtime.KeepAlive` after the call so a cleanup
-  cannot fire mid-call. The prior-art Jemmic wrapper omits the KeepAlive -
-  a latent free-during-call bug; here forgetting it is impossible rather
-  than merely reviewed for;
+- **the pointer is not handed out**: every C call goes through
+  `use(h, func(p P) R)`, which runs `runtime.KeepAlive` after the call so
+  a cleanup cannot fire mid-call. The prior-art Jemmic wrapper omits the
+  KeepAlive - a latent free-during-call bug; here forgetting it is
+  impossible rather than merely reviewed for. The one exception is
+  `Matcher.exec`, the hot path: it calls `ptr()` on both handles and
+  `KeepAlive` by hand, because the closure indirection measured about 5%
+  on a JIT match;
 - an atomic freed-counter per block type (`codesFreed`,
   `matchDatasFreed`) exists purely as a test hook for the GC tests.
 
-`Regexp` is `{code *codeHandle; matchers *sync.Pool; utf, crlfNewline
-bool}` - freely copyable; all copies share the handle and the pool. The
-two bools are queried once at compile time (`PCRE2_INFO_ALLOPTIONS`,
-`PCRE2_INFO_NEWLINE`) and steer the iteration advance (below).
+`Regexp` is `{code *codeHandle; matchers *sync.Pool; groups int; utf,
+crlfNewline bool}` - freely copyable; all copies share the handle and the
+pool. The three facts are queried once at compile time
+(`PCRE2_INFO_CAPTURECOUNT`, `PCRE2_INFO_ALLOPTIONS`, `PCRE2_INFO_NEWLINE`);
+the bools steer the iteration advance (below), `groups` sizes every
+Matcher bound to the pattern.
 
 ## Match state lives in pcre2_match_data
 
@@ -141,8 +146,8 @@ is shared. JIT data is freed by `pcre2_code_free` together with the
 pattern; it is never copyable, which is why compiled patterns are not
 copied at all. Two observability APIs close v1's silent-degradation hole:
 `JITAvailable()` (`pcre2_config(PCRE2_CONFIG_JIT)`) and
-`Regexp.JITCompiled()` (`PCRE2_INFO_JITSIZE`, a `size_t` output - the one
-info key that is not `uint32`). Only the default, thread-safe JIT stack is
+`Regexp.JITCompiled()` (`PCRE2_INFO_JITSIZE`, a `size_t` output, read
+through `infoSize`). Only the default, thread-safe JIT stack is
 used; `pcre2_jit_match` (skips sanity checks) is deliberately not the
 default path.
 
@@ -158,8 +163,8 @@ not race with use. Validated under `-race` by TestConcurrent.
 `pcre2_pattern_info` writes through a pointer whose C width depends on the
 key (uint32 for most, size_t for SIZE/JITSIZE, a pointer for NAMETABLE and
 FIRSTBITMAP), so the width is decided once, by key, in `info.go`
-(`info32`, `infoSize`; `#cgo noescape` keeps the output variable on the Go
-stack). The immutable facts a Regexp needs at match time - capture count,
+(`info32`, `infoSize`; `#cgo noescape` plus `#cgo nocallback`, cgo needs
+both, keep the output variable on the Go stack). The immutable facts a Regexp needs at match time - capture count,
 UTF, newline convention - are queried once in `Compile` and cached on the
 Regexp, so binding a Matcher costs no cgo round trip; `Groups()` serves
 the cache after the handle check. `Regexp.Info` exposes the numeric keys

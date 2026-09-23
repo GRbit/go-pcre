@@ -68,7 +68,7 @@ type Matcher struct {
 }
 
 // matcherFromPool returns a Matcher bound to this pattern for the
-// stateless helper APIs, recycling match data via the codeHandle pool.
+// stateless helper APIs, recycling match data via the Regexp's pool.
 // Callers must return it with putMatcher and must not retain it.
 func (re *Regexp) matcherFromPool() *Matcher {
 	if re.code == nil {
