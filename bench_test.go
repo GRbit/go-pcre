@@ -235,3 +235,27 @@ func BenchmarkParseFlags(b *testing.B) {
 		}
 	}
 }
+
+func BenchmarkCompile(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		re := MustCompile(dateCheckPattern, 0)
+		re.Free()
+	}
+}
+
+func BenchmarkCompileNamed(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		re := MustCompile(`(?<year>\d{4})-(?<month>\d{2})-(?<day>\d{2})`, 0)
+		re.Free()
+	}
+}
+
+func BenchmarkInfo(b *testing.B) {
+	re := MustCompile(dateCheckPattern, 0)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		if n, err := re.Info(INFO_MINLENGTH); err != nil || n == 0 {
+			b.Fatal("bad Info")
+		}
+	}
+}
