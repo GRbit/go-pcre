@@ -71,9 +71,7 @@ type Matcher struct {
 // stateless helper APIs, recycling match data via the Regexp's pool.
 // Callers must return it with putMatcher and must not retain it.
 func (re *Regexp) matcherFromPool() *Matcher {
-	if re.code == nil {
-		panic("pcre: use of uninitialized or freed Regexp")
-	}
+	re.code.check() // before touching the pool, which is nil on a zero Regexp
 	if v := re.matchers.Get(); v != nil {
 		return v.(*Matcher) // pool entries are always bound to re.code
 	}
@@ -134,10 +132,6 @@ func (re Regexp) NewMatcherString(subject string, flags int) *Matcher {
 
 // Reset switches the matcher object to the specified pattern and subject.
 func (m *Matcher) Reset(re Regexp, subject []byte, flags int) {
-	if re.code == nil {
-		panic("pcre: Matcher.Reset: uninitialized Regexp")
-	}
-
 	m.init(re)
 	m.MatchWFlags(subject, flags)
 }
@@ -145,10 +139,6 @@ func (m *Matcher) Reset(re Regexp, subject []byte, flags int) {
 // ResetString switches the matcher object to the specified pattern and
 // subject string.
 func (m *Matcher) ResetString(re Regexp, subject string, flags int) {
-	if re.code == nil {
-		panic("pcre: Matcher.ResetString: uninitialized Regexp")
-	}
-
 	m.init(re)
 	m.MatchStringWFlags(subject, flags)
 }
@@ -158,6 +148,7 @@ func (m *Matcher) ResetString(re Regexp, subject string, flags int) {
 // the same compiled pattern keeps the existing match data; switching
 // patterns frees the old one deterministically.
 func (m *Matcher) init(re Regexp) {
+	re.code.check() // the one gate for a zero or freed Regexp on this path
 	m.Matches = false
 	if m.re.code == re.code {
 		return
