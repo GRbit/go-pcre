@@ -3,6 +3,7 @@ package pcre
 import (
 	"errors"
 	"reflect"
+	"sync"
 	"testing"
 )
 
@@ -69,4 +70,39 @@ func TestNamesDuplicates(t *testing.T) {
 	if got, want := re.GroupNumbersForName("y"), []int{2}; !reflect.DeepEqual(got, want) {
 		t.Errorf("GroupNumbersForName(y) = %v, want %v", got, want)
 	}
+}
+
+func TestNamedCutsNameAtNUL(t *testing.T) {
+	// The Go name table keeps the semantics of the C string lookup it
+	// replaced: the name ends at its first NUL.
+	re := MustCompile(`(?<host>\w+)`, 0)
+	m := re.NewMatcherString("abc", 0)
+	if got, err := m.NamedString("host\x00junk"); err != nil || got != "abc" {
+		t.Errorf("NamedString(host NUL junk) = %q, %v; want abc", got, err)
+	}
+	if got := re.GroupNumbersForName("host\x00"); len(got) != 1 || got[0] != 1 {
+		t.Errorf("GroupNumbersForName(host NUL) = %v, want [1]", got)
+	}
+}
+
+func TestNameTableConcurrentFirstUse(t *testing.T) {
+	// The name table is parsed lazily on first use; concurrent first uses
+	// from several goroutines must parse once and all see the same table
+	// (run under -race).
+	re := MustCompile(`(?<user>\w+)@(?<host>\w+)`, 0)
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			m := re.NewMatcherString("bob@example", 0)
+			if s, err := m.NamedString("host"); err != nil || s != "example" {
+				t.Errorf("NamedString = %q, %v", s, err)
+			}
+			if names := re.CaptureNames(); len(names) != 2 || names[0].Name != "host" {
+				t.Errorf("CaptureNames = %v", names)
+			}
+		}()
+	}
+	wg.Wait()
 }

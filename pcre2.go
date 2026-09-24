@@ -18,7 +18,10 @@
 // Match errors: the stateless helpers (MatchWFlags, Find*, ReplaceAll)
 // treat a match-time error (invalid UTF subject, match or depth limit) as
 // no match, exactly as v1 did. To observe the error, match through a
-// Matcher and read Matcher.Error.
+// Matcher and read Matcher.Error. Partial matches (PARTIAL_SOFT,
+// PARTIAL_HARD) count as matches for the helpers as they do for
+// Matcher.Matches: FindIndex and FindString return the partially matched
+// span. To tell a partial from a full match, use Matcher.Partial.
 //
 // Requirements: libpcre2-8 >= 10.34 (Debian/Ubuntu: apt install
 // libpcre2-dev). Features that need a newer libpcre2 are gated to fail at

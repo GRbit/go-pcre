@@ -69,3 +69,30 @@ func TestPartialJIT(t *testing.T) {
 		t.Error("expected a partial match under JIT partial mode")
 	}
 }
+
+func TestJITCompiledReportsWhatTheJITDid(t *testing.T) {
+	// JITCompiled is the observable truth, not "Study was called": a
+	// pattern that opts out with (*NO_JIT) studies successfully and stays
+	// interpreted; \C in UTF mode is refused by the JIT compiler outright.
+	if !JITAvailable() {
+		t.Skip("libpcre2 built without JIT")
+	}
+	re := MustCompile(`(*NO_JIT)abc`, 0)
+	if err := re.Study(JIT_COMPLETE); err != nil {
+		t.Fatalf("Study on (*NO_JIT): %v, want success", err)
+	}
+	if re.JITCompiled() {
+		t.Error("(*NO_JIT) pattern reports JITCompiled = true")
+	}
+	if !re.MatchStringWFlags("xabcx", 0) {
+		t.Error("(*NO_JIT) pattern must still match, interpreted")
+	}
+
+	re = MustCompile(`a\C`, UTF)
+	if err := re.Study(JIT_COMPLETE); err == nil {
+		t.Error("Study on \\C in UTF mode: want the JIT's unsupported-feature error")
+	}
+	if re.JITCompiled() {
+		t.Error("\\C pattern reports JITCompiled = true after a failed Study")
+	}
+}

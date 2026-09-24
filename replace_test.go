@@ -136,3 +136,26 @@ func TestReplaceAllTemplate(t *testing.T) {
 		t.Errorf("bytes: got %q, want %q", gotB, want)
 	}
 }
+
+func TestReplaceAllTemplateFlags(t *testing.T) {
+	// The SUBSTITUTE_* extras are passed through to pcre2_substitute.
+	re := MustCompile(`(?<w>\w+)`, 0)
+	for _, tc := range []struct {
+		template string
+		flags    int
+		want     string
+		wantErr  bool
+	}{
+		{`${w}`, 0, "ab cd", false},
+		{`\U${w}`, SUBSTITUTE_EXTENDED, "AB CD", false},
+		{`${w:-x}`, SUBSTITUTE_EXTENDED, "ab cd", false},
+		{`[$9]`, 0, "", true},                              // unknown group is an error by default
+		{`[$9]`, SUBSTITUTE_UNKNOWN_UNSET, "[] []", false}, // ... unless treated as unset
+		{`${zzz}`, SUBSTITUTE_UNKNOWN_UNSET, " ", false},
+	} {
+		got, err := re.ReplaceAllTemplateString("ab cd", tc.template, tc.flags)
+		if (err != nil) != tc.wantErr || got != tc.want {
+			t.Errorf("template %q flags %#x: got %q, %v; want %q, err=%v", tc.template, tc.flags, got, err, tc.want, tc.wantErr)
+		}
+	}
+}

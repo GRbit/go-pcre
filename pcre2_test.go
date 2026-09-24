@@ -184,3 +184,40 @@ func TestZeroValueRegexpPanics(t *testing.T) {
 		}()
 	}
 }
+
+func TestFreedRegexpPanicsEverywhere(t *testing.T) {
+	// Every entry point that touches the compiled pattern, or a fact cached
+	// from it, must fail the same way after Free: a panic naming the freed
+	// object, never a stale answer and never a nil dereference.
+	re := MustCompile(`(?<n>a)`, 0)
+	if !re.MatchStringWFlags("a", 0) {
+		t.Fatal("sanity: should match before Free")
+	}
+	re.Free()
+
+	var m Matcher
+	for name, f := range map[string]func(){
+		"Groups":              func() { re.Groups() },
+		"CaptureNames":        func() { re.CaptureNames() },
+		"GroupNumbersForName": func() { re.GroupNumbersForName("n") },
+		"Info":                func() { _, _ = re.Info(INFO_MINLENGTH) },
+		"JITCompiled":         func() { re.JITCompiled() },
+		"Study":               func() { _ = re.Study(JIT_COMPLETE) },
+		"NewMatcher":          func() { re.NewMatcher([]byte("a"), 0) },
+		"Reset":               func() { m.Reset(re, []byte("a"), 0) },
+		"MatchWFlags":         func() { re.MatchWFlags([]byte("a"), 0) },
+		"FindIndex":           func() { re.FindIndex([]byte("a"), 0) },
+		"FindAllIndex":        func() { re.FindAllIndex([]byte("a"), 0) },
+		"ReplaceAll":          func() { re.ReplaceAll([]byte("a"), nil, 0) },
+		"ReplaceAllTemplate":  func() { _, _ = re.ReplaceAllTemplate([]byte("a"), nil, 0) },
+	} {
+		func() {
+			defer func() {
+				if r := recover(); r == nil || !strings.Contains(fmt.Sprint(r), "freed") {
+					t.Errorf("%s on a freed Regexp: panic %v, want a message mentioning freed", name, r)
+				}
+			}()
+			f()
+		}()
+	}
+}

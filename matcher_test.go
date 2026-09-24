@@ -358,3 +358,26 @@ func TestConcurrent(t *testing.T) {
 		wg.Wait()
 	}
 }
+
+func TestMatcherSwitchingPatternFreesOldMatchData(t *testing.T) {
+	// Rebinding a Matcher to another pattern must release the previous
+	// match data deterministically (it is sized for the old pattern), while
+	// rebinding to the same pattern keeps it.
+	re1 := MustCompile("a(b)", 0)
+	re2 := MustCompile("c", 0)
+	m := re1.NewMatcher([]byte("ab"), 0)
+
+	settleCleanups()
+	before := matchDatasFreed.Load()
+	m.Reset(re1, []byte("ab"), 0) // same pattern: nothing freed
+	if got := matchDatasFreed.Load(); got != before {
+		t.Errorf("rebinding to the same pattern freed %d match data, want 0", got-before)
+	}
+	m.Reset(re2, []byte("c"), 0) // other pattern: the old block goes now
+	if got := matchDatasFreed.Load(); got != before+1 {
+		t.Errorf("switching patterns freed %d match data, want 1", got-before)
+	}
+	if !m.Matches || m.Groups != 0 {
+		t.Errorf("after switching: Matches=%v Groups=%d, want a match with 0 groups", m.Matches, m.Groups)
+	}
+}

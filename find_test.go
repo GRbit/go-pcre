@@ -129,3 +129,28 @@ func TestHelpersReportMatchErrorAsNoMatch(t *testing.T) {
 		t.Errorf("ReplaceAll: got %q, want the subject unchanged", got)
 	}
 }
+
+func TestHelpersReportPartialAsMatch(t *testing.T) {
+	// A partial match sets Matches (as in v1), so the stateless helpers,
+	// which have no Partial flag to expose, report it as a match and slice
+	// the partially matched span. Pinned so the package comment stays true.
+	re := MustCompile("abc", 0)
+	subject := []byte("xab")
+	for _, flag := range []int{PARTIAL_SOFT, PARTIAL_HARD} {
+		if m := re.NewMatcher(subject, flag); !m.Matches || !m.Partial {
+			t.Fatalf("flag %#x: Matcher Matches=%v Partial=%v, want a partial match", flag, m.Matches, m.Partial)
+		}
+		if !re.MatchWFlags(subject, flag) {
+			t.Errorf("flag %#x: MatchWFlags = false, want true", flag)
+		}
+		if got := re.FindIndex(subject, flag); !reflect.DeepEqual(got, []int{1, 3}) {
+			t.Errorf("flag %#x: FindIndex = %v, want [1 3]", flag, got)
+		}
+		if got := re.FindString(string(subject), flag); got != "ab" {
+			t.Errorf("flag %#x: FindString = %q, want ab", flag, got)
+		}
+		if got := re.FindAllIndex(subject, flag); !reflect.DeepEqual(got, [][]int{{1, 3}}) {
+			t.Errorf("flag %#x: FindAllIndex = %v, want [[1 3]]", flag, got)
+		}
+	}
+}
