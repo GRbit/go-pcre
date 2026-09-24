@@ -175,10 +175,14 @@ are the typed front ends for the special ones.
 ## Names, config, flag parsing
 
 The 8-bit name table format is unchanged from PCRE1 (2 bytes group number
-MSB-first + NUL-terminated name); `CaptureNames` parses it from
-`INFO_NAMETABLE`. `GroupNumbersForName` uses
-`pcre2_substring_nametable_scan` to enumerate DUPNAMES groups; `Named*`
-map `PCRE2_ERROR_NOUNIQUESUBSTRING` to `ErrNonUniqueName`. `Config` uses
+MSB-first + NUL-terminated name). It is parsed into Go once per pattern,
+lazily under `sync.Once` on the first `CaptureNames` or `Named*` call
+(`names.go`), so lookups are a binary search over the name-sorted entries
+instead of `pcre2_substring_number_from_name` with a C string per call;
+the rules are the same (one entry: its number; several, DUPNAMES:
+`ErrNonUniqueName`; none: unknown; the name is cut at its first NUL as the
+C string was). `GroupNumbersForName` returns the run of duplicates.
+`Config` uses
 PCRE2's two protocols (uniform `uint32` numerics; NULL-probe-then-buffer
 strings). `ParseFlags` keeps v1's lenient historic scanner (a byte loop over the
 leading `(?letters)` groups: no pattern is compiled at package init and no

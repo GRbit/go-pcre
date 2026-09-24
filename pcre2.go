@@ -125,7 +125,10 @@ type Regexp struct {
 
 	// Facts queried once at compile time (pcre2_pattern_info). The bools
 	// steer the bump-along advance of the global-match protocol; groups
-	// sizes every Matcher bound to the pattern.
+	// sizes every Matcher bound to the pattern; names (nil when the pattern
+	// has none, parsed on first use) serves CaptureNames and every Named*
+	// lookup.
+	names       *nameTable
 	groups      int
 	utf         bool // compiled with PCRE2_UTF: advance whole characters
 	crlfNewline bool // newline convention includes CRLF: skip it atomically
@@ -170,6 +173,7 @@ func Compile(pattern string, flags int) (Regexp, error) {
 	return Regexp{
 		code:     newCodeHandle(p),
 		matchers: new(sync.Pool),
+		names:    newNameTable(p),
 		groups:   int(info32(p, C.PCRE2_INFO_CAPTURECOUNT)),
 		utf:      info32(p, C.PCRE2_INFO_ALLOPTIONS)&C.PCRE2_UTF != 0,
 		crlfNewline: nl == C.PCRE2_NEWLINE_CRLF ||

@@ -3,7 +3,6 @@ package pcre
 /*
 #cgo pkg-config: libpcre2-8
 #define PCRE2_CODE_UNIT_WIDTH 8
-#include <stdlib.h>
 #include <pcre2.h>
 */
 import "C"
@@ -371,27 +370,22 @@ func (m *Matcher) ExtractString() []string {
 // Use Regexp.GroupNumbersForName to enumerate them.
 var ErrNonUniqueName = errors.New("name refers to multiple groups (DUPNAMES)")
 
-// name2index resolves a capture group name to its number via
-// pcre2_substring_number_from_name.
+// name2index resolves a capture group name to its number through the
+// name table parsed at compile time, with the rules of
+// pcre2_substring_number_from_name: one entry gives its number, several
+// entries (DUPNAMES) fail as non-unique, none as unknown.
 func (m *Matcher) name2index(name string) (int, error) {
 	if m.re.code == nil {
 		return 0, fmt.Errorf("pcre: Matcher.Named: uninitialized")
 	}
-
-	nameC := C.CString(name)
-	defer C.free(unsafe.Pointer(nameC))
-
-	group := int(use(m.re.code, func(p *C.pcre2_code) C.int {
-		return C.pcre2_substring_number_from_name(p, (*C.PCRE2_UCHAR)(unsafe.Pointer(nameC)))
-	}))
-	switch {
-	case group == ERROR_NOUNIQUESUBSTRING:
-		return 0, fmt.Errorf("pcre: Matcher.Named: %q: %w", name, ErrNonUniqueName)
-	case group < 0:
+	switch nums := m.re.table().lookup(name); len(nums) {
+	case 1:
+		return nums[0], nil
+	case 0:
 		return 0, fmt.Errorf("pcre: Matcher.Named: unknown name: %s", name)
 	}
 
-	return group, nil
+	return 0, fmt.Errorf("pcre: Matcher.Named: %q: %w", name, ErrNonUniqueName)
 }
 
 // Named returns the value of the named capture group. This is a nil slice
