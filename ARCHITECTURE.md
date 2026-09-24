@@ -32,14 +32,15 @@ from v1's `extraHandle`:
 - explicit, idempotent `Free()` (`sync.Once` + cleanup.Stop + nil-swap)
   for deterministic release; use-after-free panics with a clear message
   naming the Go owner (Regexp or Matcher);
-- **the pointer is not handed out**: every C call goes through
-  `use(h, func(p P) R)`, which runs `runtime.KeepAlive` after the call so
-  a cleanup cannot fire mid-call. The prior-art Jemmic wrapper omits the
-  KeepAlive - a latent free-during-call bug; here forgetting it is
-  impossible rather than merely reviewed for. The one exception is
-  `Matcher.exec`, the hot path: it calls `ptr()` on both handles and
-  `KeepAlive` by hand, because the closure indirection measured about 5%
-  on a JIT match;
+- **the pointer is never handed out**: every C call goes through
+  `use(h, func(p P) R)` (`use2` for `pcre2_match`, which reads both
+  blocks), which runs `runtime.KeepAlive` after the call so a cleanup
+  cannot fire mid-call. The prior-art Jemmic wrapper omits the KeepAlive -
+  a latent free-during-call bug; here forgetting it is impossible rather
+  than merely reviewed for. The closure on the `pcre2_match` path is not
+  measurable against the cgo round trip (interleaved BenchmarkExecJIT
+  runs against a hand-written variant differed by about 2%, inside the
+  5-10% layout noise of that benchmark);
 - an atomic freed-counter per block type (`codesFreed`,
   `matchDatasFreed`) exists purely as a test hook for the GC tests.
 

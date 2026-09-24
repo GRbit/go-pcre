@@ -10,12 +10,10 @@ import (
 // explicitly via Free or by a GC cleanup once the handle becomes
 // unreachable; the cleanup is the backstop, not the API.
 //
-// The pointer is not handed out: every C call goes through use, which
-// keeps the handle reachable until the call returns. Without that a
+// The pointer is never handed out: every C call goes through use or use2,
+// which keep the handle reachable until the call returns. Without that a
 // cleanup could free the block mid-call once the owning Go object is no
-// longer referenced (a latent bug in prior-art PCRE2 wrappers). The single
-// exception is Matcher.exec (the hot path), which calls ptr and KeepAlive
-// by hand and says so.
+// longer referenced (a latent bug in prior-art PCRE2 wrappers).
 //
 // P is the C pointer type (*C.pcre2_code, *C.pcre2_match_data): the C
 // structs themselves are incomplete types and cannot be type arguments.
@@ -74,6 +72,17 @@ func (h *handle[P]) check() {
 func use[P comparable, R any](h *handle[P], f func(P) R) R {
 	r := f(h.ptr())
 	runtime.KeepAlive(h)
+
+	return r
+}
+
+// use2 is use for a C call that reads two blocks at once (pcre2_match
+// takes the match data and the code). a is checked first, so its owner
+// names the panic when both are unusable.
+func use2[A, B comparable, R any](a *handle[A], b *handle[B], f func(A, B) R) R {
+	r := f(a.ptr(), b.ptr())
+	runtime.KeepAlive(a)
+	runtime.KeepAlive(b)
 
 	return r
 }

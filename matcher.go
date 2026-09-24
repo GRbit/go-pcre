@@ -11,7 +11,6 @@ import "C"
 import (
 	"errors"
 	"fmt"
-	"runtime"
 	"sync/atomic"
 	"unsafe"
 )
@@ -202,16 +201,14 @@ func (m *Matcher) ExecString(subject string, flags int) int {
 // true context before the offset (\b, lookbehind), which the Find/Replace
 // iteration relies on.
 func (m *Matcher) exec(subject []byte, startOffset, flags int) int {
-	// The one C call that bypasses use: pcre2_match is the hot path and the
-	// closure indirection of use costs about 5% on a JIT match, so the
-	// KeepAlive discipline is spelled out by hand here. Match data first: a
-	// zero or freed Matcher reports itself, not its Regexp.
-	md, code := m.md.ptr(), m.re.code.ptr()
-	rc := C.pcre2_match(code, cptr(subject),
-		C.PCRE2_SIZE(len(subject)), C.PCRE2_SIZE(startOffset),
-		C.uint32_t(flags), md, nil)
-	runtime.KeepAlive(m.md)
-	runtime.KeepAlive(m.re.code)
+	// Match data first: a zero or freed Matcher reports itself, not its
+	// Regexp. The closure is not measurable against the cgo round trip
+	// (BenchmarkExecJIT, interleaved runs against the hand-written form).
+	rc := use2(m.md, m.re.code, func(md *C.pcre2_match_data, code *C.pcre2_code) C.int {
+		return C.pcre2_match(code, cptr(subject),
+			C.PCRE2_SIZE(len(subject)), C.PCRE2_SIZE(startOffset),
+			C.uint32_t(flags), md, nil)
+	})
 
 	return int(rc)
 }
